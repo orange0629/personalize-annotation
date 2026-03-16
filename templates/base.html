@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Annotation Tool{% endblock %}</title>
+<style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  background: #f0f2f5;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+/* ── Top bar ── */
+.topbar {
+  background: #1e3a5f;
+  color: #fff;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 4px rgba(0,0,0,.2);
+}
+.topbar .app-title { font-weight: 700; font-size: 15px; letter-spacing: .3px; }
+.topbar .spacer { flex: 1; }
+.topbar a { color: #a8c8f0; text-decoration: none; font-size: 13px; }
+.topbar a:hover { color: #fff; }
+.topbar .annotator-badge {
+  background: #2a5298;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+/* ── Container ── */
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+/* ── Cards ── */
+.card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 16px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: opacity .15s;
+}
+.btn:hover { opacity: .85; }
+.btn-primary { background: #2a5298; color: #fff; }
+.btn-success { background: #16a34a; color: #fff; }
+.btn-secondary { background: #e5e7eb; color: #374151; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Navigation ── */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.nav-info { font-size: 13px; color: #555; }
+.progress-pill {
+  background: #e5e7eb;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #374151;
+}
+.annotated-badge {
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+/* ── Jump modal ── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.4);
+  z-index: 200;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 60px;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: #fff;
+  border-radius: 10px;
+  width: 680px;
+  max-width: 95vw;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0,0,0,.2);
+  overflow: hidden;
+}
+.modal-header {
+  padding: 12px 16px;
+  background: #1e3a5f;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-search {
+  padding: 10px 16px;
+  border-bottom: 1px solid #eee;
+}
+.modal-search input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.modal-list {
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f3f4f6;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.modal-item:hover { background: #f9fafb; }
+.modal-item.annotated { background: #f0fdf4; }
+.modal-item.annotated:hover { background: #dcfce7; }
+.modal-item-idx {
+  font-size: 12px;
+  color: #888;
+  min-width: 40px;
+  padding-top: 1px;
+}
+.modal-item-text { font-size: 13px; color: #1a1a1a; flex: 1; line-height: 1.4; }
+.modal-check { font-size: 12px; color: #16a34a; }
+
+/* ── Save status ── */
+.save-status {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  transition: opacity .3s;
+}
+.save-status.saved { background: #dcfce7; color: #166534; }
+.save-status.saving { background: #fef9c3; color: #854d0e; }
+.save-status.error  { background: #fee2e2; color: #991b1b; }
+
+/* ── Attribute cards ── */
+.attr-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: #fafafa;
+  transition: border-color .2s;
+}
+.attr-item:hover { border-color: #93c5fd; }
+.attr-item.flagged { border-color: #fca5a5; background: #fff5f5; }
+.attr-item.ok     { border-color: #86efac; background: #f0fdf4; }
+
+.attr-text { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.attr-reason { font-size: 12px; color: #555; margin-bottom: 6px; line-height: 1.5; }
+.attr-conf {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #e0f2fe;
+  color: #0369a1;
+  margin-bottom: 8px;
+}
+.attr-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.attr-note-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 12px;
+  margin-top: 6px;
+  resize: vertical;
+}
+
+/* ── Checkbox items (task 2) ── */
+.checklist-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  background: #fafafa;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  transition: border-color .2s, background .2s;
+}
+.checklist-item.changed { border-color: #f59e0b; background: #fffbeb; }
+.checklist-item.checked { background: #f0fdf4; border-color: #86efac; }
+.checklist-item.unchecked { background: #fff5f5; border-color: #fca5a5; }
+.checklist-item input[type=checkbox] {
+  width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; margin-top: 2px;
+}
+.checklist-item-body { flex: 1; }
+.checklist-item-attr { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.checklist-item-behavior { font-size: 12px; color: #555; line-height: 1.5; margin-bottom: 4px; }
+.checklist-item-rel {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: #fce7f3;
+  color: #9d174d;
+}
+.changed-marker {
+  font-size: 11px;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 5px;
+  padding: 1px 6px;
+  margin-left: 6px;
+}
+
+/* ── Conversation ── */
+.conv-container {
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.conv-header {
+  background: #f1f5f9;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+.conv-header:hover { background: #e2e8f0; }
+.conv-body {
+  padding: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  display: none;
+}
+.conv-body.open { display: block; }
+
+/* Chat bubbles */
+.conv-label { font-size: 11px; font-weight: 600; color: #666; margin: 6px 0 2px; }
+.msg-details { margin: 4px 0; }
+.msg-details > summary { list-style: none; cursor: pointer; }
+.msg-details > summary::-webkit-details-marker { display: none; }
+.msg { padding: 6px 10px; border-radius: 6px; }
+.msg-role { font-size: 10px; font-weight: 600; opacity: .7; margin-bottom: 2px; }
+.msg-text { font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.msg-user      { background: #dbeafe; border-left: 3px solid #3b82f6; margin: 3px 0; }
+.msg-assistant { background: #dcfce7; border-left: 3px solid #22c55e; margin: 3px 0; }
+.msg-other     { background: #f3f4f6; border-left: 3px solid #9ca3af; margin: 3px 0; }
+.msg-long { margin-top: 3px; margin-left: 6px; }
+.msg-expanded { opacity: .9; }
+.chat-empty { font-size: 12px; color: #777; padding: 6px; }
+.chat-more-hint { font-size: 11px; color: #777; padding: 4px; }
+
+/* ── User id display ── */
+.user-id-chip {
+  display: inline-block;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+/* ── Prompt box ── */
+.prompt-box {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* ── Textarea ── */
+textarea.note-area {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 70px;
+}
+
+/* ── Two-column layout ── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ── Section label ── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: #888;
+  margin-bottom: 8px;
+}
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+.badge-gray { background: #e5e7eb; color: #374151; }
+.badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-yellow { background: #fef9c3; color: #854d0e; }
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="topbar">
+  <span class="app-title">📝 Annotation Tool</span>
+  <a href="{{ url_for('task_select') }}">Home</a>
+  {% if current_annotator %}
+  <span class="annotator-badge">👤 {{ current_annotator }}</span>
+  {% endif %}
+  <span class="spacer"></span>
+  <a href="{{ url_for('logout') }}">Switch user</a>
+</div>
+{% block body %}{% endblock %}
+<script>
+// Helper: autosave status
+function showSaveStatus(el, state, msg) {
+  el.className = 'save-status ' + state;
+  el.textContent = msg;
+}
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

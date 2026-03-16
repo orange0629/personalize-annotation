@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Select Task — Annotation Tool{% endblock %}
+
+{% block body %}
+<div class="container" style="max-width:700px; padding-top:40px;">
+  <div class="card" style="margin-bottom:24px; text-align:center; padding:28px;">
+    <div style="font-size:36px;">👋</div>
+    <h2 style="margin-top:10px; color:#1e3a5f;">Hello, {{ annotator }}!</h2>
+    <p style="color:#666; margin-top:6px; font-size:13px;">Choose a task to annotate.</p>
+  </div>
+
+  <!-- Task 1 -->
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
+          Task 1 — User Attribute Annotation
+        </h3>
+        <p style="font-size:13px; color:#555; line-height:1.6; margin-bottom:12px;">
+          For each user, review their conversation history and list of inferred attributes.
+          Determine which attributes make sense and which are missing or incorrect.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          {% if t1_ready %}
+            <span class="badge badge-green">✓ Index ready</span>
+          {% else %}
+            <span class="badge badge-yellow">⚠ Index not built</span>
+          {% endif %}
+          <span class="badge badge-gray">{{ t1_count }} users</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
+        {% if t1_ready %}
+          <a href="{{ url_for('task1_redirect') }}" class="btn btn-primary" style="justify-content:center;">
+            Start Task 1 →
+          </a>
+        {% else %}
+          <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
+            Index required
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Task 2 -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
+          Task 2 — Checklist Relevance Annotation
+        </h3>
+        <p style="font-size:13px; color:#555; line-height:1.6; margin-bottom:12px;">
+          For each user–prompt pair, review the list of profile attributes and the
+          "relevant" subset selected by the model. Verify which attributes are truly
+          relevant to the given prompt.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          {% if t2_ready %}
+            <span class="badge badge-green">✓ Index ready</span>
+          {% else %}
+            <span class="badge badge-yellow">⚠ Index not built</span>
+          {% endif %}
+          <span class="badge badge-gray">{{ t2_count }} pairs</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
+        {% if t2_ready %}
+          <a href="{{ url_for('task2_redirect') }}" class="btn btn-primary" style="justify-content:center;">
+            Start Task 2 →
+          </a>
+        {% else %}
+          <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
+            Index required
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if not t1_ready or not t2_ready %}
+  <div class="card" style="background:#fffbeb; border:1px solid #fcd34d;">
+    <p style="font-size:13px; color:#78350f; line-height:1.6;">
+      <strong>⚠ Some indexes are not built.</strong><br>
+      Run <code>python3 build_index.py</code> in the <code>annotation_tool/</code> directory
+      to build the required indexes before using the tasks above.
+      This only needs to be done once.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
