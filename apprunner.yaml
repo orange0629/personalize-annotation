@@ -1,0 +1,15 @@
+version: 1.0
+runtime: python311
+
+build:
+  commands:
+    build:
+      - python3 -m pip install --upgrade pip
+
+run:
+  runtime-version: 3.11
+  pre-run:
+    - python3 -m pip install -r requirements.txt
+  command: python3 -m gunicorn app:app --bind 0.0.0.0:5050
+  network:
+    port: 5050
