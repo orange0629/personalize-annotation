@@ -4,24 +4,82 @@
 {% block extra_head %}
 <style>
 .judgment-btn {
-  padding: 5px 14px;
-  border-radius: 5px;
-  border: 1.5px solid #d1d5db;
-  background: #f9fafb;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all .15s;
+  padding: 5px 14px; border-radius: 5px; border: 1.5px solid #d1d5db;
+  background: #f9fafb; cursor: pointer; font-size: 12px; font-weight: 500; transition: all .15s;
 }
 .judgment-btn:hover { background: #e5e7eb; }
-.judgment-btn.active-ok { background: #dcfce7; border-color: #16a34a; color: #166534; }
-.judgment-btn.active-bad { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+.judgment-btn.active-ok     { background: #dcfce7; border-color: #16a34a; color: #166534; }
+.judgment-btn.active-bad    { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
 .judgment-btn.active-unsure { background: #fef9c3; border-color: #ca8a04; color: #854d0e; }
+.section-divider { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
 
-.section-divider {
-  border: none;
-  border-top: 1px solid #e5e7eb;
-  margin: 16px 0;
+/* ── Instruction line ────────────────────────────────────────── */
+.instr-line {
+  font-size: 12px; color: #1e3a5f; margin-top: 8px; padding: 7px 10px;
+  border: 1px solid #bfdbfe; border-radius: 6px; background: #eff6ff; line-height: 1.5;
+}
+
+/* ── Flag button (in nav bar) ────────────────────────────────── */
+.flag-btn {
+  padding: 4px 10px; border-radius: 5px; border: 1.5px solid #fca5a5;
+  background: #fff; cursor: pointer; font-size: 11px; color: #b91c1c; font-weight: 500;
+  transition: all .15s; white-space: nowrap;
+}
+.flag-btn:hover, .flag-btn.active { background: #fee2e2; border-color: #dc2626; }
+
+/* ── Sticky nav ──────────────────────────────────────────────── */
+.sticky-nav { position: sticky; top: 44px; z-index: 50; background: #f8fafc; padding-bottom: 4px; }
+
+/* ── Two-column layout ───────────────────────────────────────── */
+.two-col-sticky { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
+
+/* ── Sticky left column ──────────────────────────────────────── */
+.sticky-col {
+  position: sticky; top: 144px; max-height: calc(100vh - 160px);
+  overflow-y: scroll; padding-bottom: 32px;
+  scrollbar-width: thin; scrollbar-color: #94a3b8 #cbd5e1; border-radius: 8px;
+  scrollbar-gutter: stable;
+}
+.sticky-col::-webkit-scrollbar       { width: 8px; display: block; }
+.sticky-col::-webkit-scrollbar-track { background: #cbd5e1; border-radius: 4px; }
+.sticky-col::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; min-height: 40px; }
+
+/* Flat conversation card */
+.conv-flat { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.conv-flat-title {
+  background: #f3f4f6; padding: 7px 12px; font-size: 12px; font-weight: 600;
+  color: #374151; display: flex; align-items: center; gap: 8px;
+}
+.conv-flat-body { padding: 6px 0; }
+
+/* ── Incomplete warning ──────────────────────────────────────── */
+.warn-badge { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  /* Nav bar: smaller, tighter */
+  .sticky-nav { top: 38px; }
+  .sticky-nav .card { padding: 7px 10px; }
+  .sticky-nav .nav-bar { gap: 5px; }
+  .sticky-nav .btn-sm { padding: 3px 7px; font-size: 11px; }
+  .sticky-nav .progress-pill,
+  .sticky-nav .annotated-badge,
+  .sticky-nav .warn-badge { font-size: 11px; }
+  /* Hide instruction in nav on mobile — too much vertical space */
+  .sticky-nav .instr-line { display: none; }
+
+  /* Sticky col becomes normal flow */
+  .sticky-col {
+    position: relative !important;
+    top: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Shrink conversation bubbles a bit */
+  .msg-text { font-size: 11px; }
 }
 </style>
 {% endblock %}
@@ -29,70 +87,63 @@
 {% block body %}
 <div class="container">
 
-  <!-- Navigation bar -->
-  <div class="card" style="padding:12px 16px;">
-    <div class="nav-bar">
-      {% if idx > 0 %}
-        <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx-1) }}')">← Prev</button>
-      {% else %}
-        <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
-      {% endif %}
+  <!-- Sticky nav + instruction -->
+  <div class="sticky-nav">
+    <div class="card" style="padding:10px 16px; margin-bottom:0;">
+      <div class="nav-bar">
+        {% if idx > 0 %}
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx-1) }}')">← Prev</button>
+        {% else %}
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
+        {% endif %}
+        <span class="nav-info">User <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong></span>
+        <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
+        {% if is_annotated %}<span class="annotated-badge">✓ Annotated</span>{% endif %}
+        <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
+        {% if idx < total - 1 %}
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx+1) }}')">Next →</button>
+        {% else %}
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">Next →</span>
+        {% endif %}
+        <span style="flex:1;"></span>
+        <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
+        <button class="flag-btn {% if existing and existing.flagged %}active{% endif %}" id="flagBtn" onclick="toggleFlag()">🚩 Flag Uncomfortable</button>
+        <span id="saveStatus" class="save-status" style="opacity:0;"> </span>
+      </div>
 
-      <span class="nav-info">
-        User <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong>
-      </span>
-      <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
-
-      {% if existing %}
-        <span class="annotated-badge">✓ Annotated</span>
-      {% endif %}
-
-      <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
-
-      {% if idx < total - 1 %}
-        <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx+1) }}')">Next →</button>
-      {% else %}
-        <span class="btn btn-secondary btn-sm" style="opacity:.4;">Next →</span>
-      {% endif %}
-
-      <span class="spacer" style="flex:1;"></span>
-      <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
-      <span id="saveStatus" class="save-status" style="opacity:0;"> </span>
+      <!-- Instruction -->
+      <div class="instr-line">
+        <strong>Instruction:</strong> Read the conversation history on the left. For each inferred attribute on the right, judge whether it accurately reflects the user. Also note any missing attributes.
+      </div>
     </div>
   </div>
 
   <!-- User info -->
-  <div class="card" style="padding:12px 16px;">
+  <div class="card" style="padding:10px 16px; margin-top:8px;">
     <div class="card-title">User</div>
     <span class="user-id-chip">{{ user_id }}</span>
     <span class="badge badge-gray" style="margin-left:8px;">{{ conv_htmls|length }} conversation(s)</span>
     <span class="badge badge-blue" style="margin-left:4px;">{{ merged_attrs|length }} attributes</span>
   </div>
 
-  <div class="two-col">
+  <div class="two-col-sticky" style="margin-top:12px;">
 
-    <!-- Left: Conversations -->
-    <div>
-      <div class="card-title" style="padding:0 0 6px 0;">Conversation History</div>
+    <!-- Left: Conversations (sticky) -->
+    <div class="sticky-col">
+      <div class="card-title" style="padding:0 0 8px 0;">Conversation History</div>
       {% if conv_htmls %}
         {% for cv in conv_htmls %}
-        <div class="conv-container">
-          <div class="conv-header" onclick="toggleConv(this)">
-            <span>Conversation {{ loop.index }}
-              {% if cv.model %}<span class="badge badge-gray" style="margin-left:6px;">{{ cv.model }}</span>{% endif %}
-            </span>
-            <span style="font-size:16px;">▸</span>
+        <div class="conv-flat">
+          <div class="conv-flat-title">
+            Conversation {{ loop.index }}
+            {% if cv.model %}<span class="badge badge-gray">{{ cv.model }}</span>{% endif %}
           </div>
-          <div class="conv-body">
-            {{ cv.html | safe }}
-          </div>
+          <div class="conv-flat-body">{{ cv.html | safe }}</div>
         </div>
         {% endfor %}
       {% else %}
         <div class="card">
-          <p style="font-size:13px; color:#888;">No conversation data found for this user.
-            <br><em>(Conversations index may not be built, or user has no conversations.)</em>
-          </p>
+          <p style="font-size:13px; color:#888;">No conversation data found for this user.</p>
         </div>
       {% endif %}
     </div>
@@ -103,48 +154,32 @@
 
       <div id="attrList">
         {% for attr in merged_attrs %}
-        <div class="attr-item" id="attr-{{ loop.index0 }}"
-             data-idx="{{ loop.index0 }}"
-             data-judgment="{{ existing.attr_judgments[loop.index0].judgment if existing and existing.attr_judgments and loop.index0 < existing.attr_judgments|length else '' }}">
+        <div class="attr-item" id="attr-{{ loop.index0 }}" data-idx="{{ loop.index0 }}">
 
           <div class="attr-text">{{ attr.attribute }}</div>
 
-          {% if attr.reason %}
-          <div class="attr-reason">
-            <em>Reason:</em> {{ attr.reason[:400] }}{% if attr.reason|length > 400 %}…{% endif %}
-          </div>
+          {% if not annotator_mode %}
+            {% if attr.reason %}
+            <div class="attr-reason"><em>Reason:</em> {{ attr.reason[:400] }}{% if attr.reason|length > 400 %}…{% endif %}</div>
+            {% endif %}
+            {% if attr.original_attributes %}
+            <details style="margin-bottom:6px;">
+              <summary style="font-size:11px; color:#888; cursor:pointer;">Original variants ({{ attr.original_attributes|length }})</summary>
+              <ul style="margin:4px 0 0 16px; font-size:11px; color:#666; line-height:1.6;">
+                {% for oa in attr.original_attributes %}<li>{{ oa }}</li>{% endfor %}
+              </ul>
+            </details>
+            {% endif %}
+            <span class="attr-conf">conf: {{ "%.2f"|format(attr.confidence|float) }}</span>
           {% endif %}
-
-          {% if attr.original_attributes %}
-          <details style="margin-bottom:6px;">
-            <summary style="font-size:11px; color:#888; cursor:pointer;">
-              Original variants ({{ attr.original_attributes|length }})
-            </summary>
-            <ul style="margin:4px 0 0 16px; font-size:11px; color:#666; line-height:1.6;">
-              {% for oa in attr.original_attributes %}
-              <li>{{ oa }}</li>
-              {% endfor %}
-            </ul>
-          </details>
-          {% endif %}
-
-          <span class="attr-conf">conf: {{ "%.2f"|format(attr.confidence|float) }}</span>
 
           <div class="attr-controls">
-            <button class="judgment-btn" data-val="ok" onclick="setJudgment({{ loop.index0 }}, 'ok', this)">
-              ✓ Makes sense
-            </button>
-            <button class="judgment-btn" data-val="bad" onclick="setJudgment({{ loop.index0 }}, 'bad', this)">
-              ✗ Doesn't make sense
-            </button>
-            <button class="judgment-btn" data-val="unsure" onclick="setJudgment({{ loop.index0 }}, 'unsure', this)">
-              ? Unsure
-            </button>
+            <button class="judgment-btn" data-val="ok"     onclick="setJudgment({{ loop.index0 }}, 'ok', this)">✓ Makes sense</button>
+            <button class="judgment-btn" data-val="bad"    onclick="setJudgment({{ loop.index0 }}, 'bad', this)">✗ Doesn't make sense</button>
+            <button class="judgment-btn" data-val="unsure" onclick="setJudgment({{ loop.index0 }}, 'unsure', this)">? Unsure</button>
           </div>
 
-          <textarea class="attr-note-input" rows="1"
-            placeholder="Optional note for this attribute..."
-            id="note-{{ loop.index0 }}"
+          <textarea class="attr-note-input" rows="1" placeholder="Optional note…" id="note-{{ loop.index0 }}"
           >{% if existing and existing.attr_judgments and loop.index0 < existing.attr_judgments|length %}{{ existing.attr_judgments[loop.index0].note or '' }}{% endif %}</textarea>
         </div>
         {% endfor %}
@@ -152,23 +187,21 @@
 
       <hr class="section-divider">
 
-      <!-- Missing attributes -->
       <div class="card-title" style="padding:0 0 6px 0;">Missing Attributes</div>
-      <textarea class="note-area" id="missingAttrs"
-        placeholder="List any attributes you think are missing from the profile above, one per line..."
-      >{{ existing.missing_attrs if existing else '' }}</textarea>
+      <textarea class="note-area" id="missingAttrs" placeholder="List any attributes you think are missing, one per line…">{{ existing.missing_attrs if existing else '' }}</textarea>
 
       <hr class="section-divider">
 
-      <!-- Overall note -->
       <div class="card-title" style="padding:0 0 6px 0;">Overall Note</div>
-      <textarea class="note-area" id="overallNote"
-        placeholder="Any overall comments about this user's attribute profile..."
-      >{{ existing.overall_note if existing else '' }}</textarea>
+      <textarea class="note-area" id="overallNote" placeholder="Any overall comments…">{{ existing.overall_note if existing else '' }}</textarea>
 
-      <div style="margin-top:12px;">
+      <div style="margin-top:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <button class="btn btn-success" onclick="saveAnnotation()">💾 Save Annotation</button>
-        <span id="saveStatus2" class="save-status" style="margin-left:10px; opacity:0;"> </span>
+        {% if idx < total - 1 %}
+        <button class="btn btn-primary" onclick="saveAndNavigate('/task1/{{ idx+1 }}')">💾 Save &amp; Next →</button>
+        {% endif %}
+        <span id="saveStatus2" class="save-status" style="opacity:0;"> </span>
+        <span id="incompleteWarn" class="warn-badge" style="display:none;"></span>
       </div>
     </div>
   </div>
@@ -183,10 +216,10 @@
       <button onclick="closeJumpModal()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;">✕</button>
     </div>
     <div class="modal-search">
-      <input type="text" id="jumpSearch" placeholder="Search by user ID or index..." oninput="filterJumpList()">
+      <input type="text" id="jumpSearch" placeholder="Search by user ID or index…" oninput="filterJumpList()">
     </div>
     <div class="modal-list" id="jumpList">
-      <div style="padding:20px; text-align:center; color:#888; font-size:13px;">Loading...</div>
+      <div style="padding:20px;text-align:center;color:#888;font-size:13px;">Loading…</div>
     </div>
   </div>
 </div>
@@ -194,42 +227,32 @@
 
 {% block extra_js %}
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
 const totalAttrs = {{ merged_attrs|length }};
-const judgments = {};  // idx -> {judgment, note}
+const judgments  = {};
+let   isFlagged  = {{ 'true' if existing and existing.flagged else 'false' }};
 
 {% if existing and existing.attr_judgments %}
-// Restore existing judgments
 const existingJ = {{ existing.attr_judgments | tojson }};
 existingJ.forEach((j, i) => {
-  if (j && j.judgment) {
-    judgments[i] = { judgment: j.judgment, note: j.note || '' };
-  }
+  if (j && j.judgment) judgments[i] = { judgment: j.judgment, note: j.note || '' };
 });
 {% endif %}
 
-// Apply restored UI state
 document.addEventListener('DOMContentLoaded', () => {
   for (const [idx, j] of Object.entries(judgments)) {
-    const btns = document.querySelectorAll(`#attr-${idx} .judgment-btn`);
-    btns.forEach(b => {
-      if (b.dataset.val === j.judgment) {
-        b.classList.add(`active-${j.judgment}`);
-      }
+    document.querySelectorAll(`#attr-${idx} .judgment-btn`).forEach(b => {
+      if (b.dataset.val === j.judgment) b.classList.add(`active-${j.judgment}`);
     });
     updateAttrItemClass(parseInt(idx), j.judgment);
   }
+  updateIncompleteWarn();
 });
 
-// ── Judgment buttons ───────────────────────────────────────────────────────
+// ── Judgment ───────────────────────────────────────────────────
 function setJudgment(idx, val, btn) {
-  const container = document.getElementById(`attr-${idx}`);
-  const btns = container.querySelectorAll('.judgment-btn');
-  btns.forEach(b => b.className = 'judgment-btn');
-
+  document.querySelectorAll(`#attr-${idx} .judgment-btn`).forEach(b => b.className = 'judgment-btn');
   const note = document.getElementById(`note-${idx}`).value;
   if (judgments[idx] && judgments[idx].judgment === val) {
-    // Toggle off
     delete judgments[idx];
     updateAttrItemClass(idx, null);
   } else {
@@ -237,22 +260,41 @@ function setJudgment(idx, val, btn) {
     judgments[idx] = { judgment: val, note };
     updateAttrItemClass(idx, val);
   }
+  updateIncompleteWarn();
 }
 
 function updateAttrItemClass(idx, val) {
-  const el = document.getElementById(`attr-${idx}`);
-  el.className = 'attr-item' + (val === 'ok' ? ' ok' : val === 'bad' ? ' flagged' : '');
+  document.getElementById(`attr-${idx}`).className =
+    'attr-item' + (val === 'ok' ? ' ok' : val === 'bad' ? ' flagged' : '');
 }
 
-// ── Conversations ──────────────────────────────────────────────────────────
-function toggleConv(header) {
-  const body = header.nextElementSibling;
-  const arrow = header.querySelector('span:last-child');
-  body.classList.toggle('open');
-  arrow.textContent = body.classList.contains('open') ? '▾' : '▸';
+// ── Incomplete check ───────────────────────────────────────────
+function countIncomplete() {
+  let n = 0;
+  for (let i = 0; i < totalAttrs; i++) {
+    if (!judgments[i] || !judgments[i].judgment) n++;
+  }
+  return n;
 }
 
-// ── Save ───────────────────────────────────────────────────────────────────
+function updateIncompleteWarn() {
+  const n = countIncomplete();
+  const el = document.getElementById('incompleteWarn');
+  if (n > 0) {
+    el.textContent = `${n} attribute${n > 1 ? 's' : ''} not yet judged`;
+    el.style.display = 'inline';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// ── Flag ───────────────────────────────────────────────────────
+function toggleFlag() {
+  isFlagged = !isFlagged;
+  document.getElementById('flagBtn').classList.toggle('active', isFlagged);
+}
+
+// ── Payload ────────────────────────────────────────────────────
 function collectPayload() {
   const attrJudgments = [];
   for (let i = 0; i < totalAttrs; i++) {
@@ -262,79 +304,74 @@ function collectPayload() {
   }
   return {
     attr_judgments: attrJudgments,
-    missing_attrs: document.getElementById('missingAttrs').value,
-    overall_note: document.getElementById('overallNote').value,
+    missing_attrs:  document.getElementById('missingAttrs').value,
+    overall_note:   document.getElementById('overallNote').value,
+    flagged:        isFlagged,
   };
 }
 
+// ── Save ────────────────────────────────────────────────────────
 function saveAnnotation() {
   const st1 = document.getElementById('saveStatus');
   const st2 = document.getElementById('saveStatus2');
   [st1, st2].forEach(s => { s.style.opacity = '1'; showSaveStatus(s, 'saving', 'Saving…'); });
   fetch(`/task1/{{ idx }}/save`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(collectPayload()),
   })
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
-      [st1, st2].forEach(s => showSaveStatus(s, 'saved', '✓ Saved'));
+      const n = countIncomplete();
+      const msg = n > 0 ? `✓ Saved (${n} attr${n>1?'s':''} unrated)` : '✓ Saved';
+      const type = n > 0 ? 'warning' : 'saved';
+      [st1, st2].forEach(s => showSaveStatus(s, type, msg));
       setTimeout(() => [st1, st2].forEach(s => s.style.opacity = '0'), 3000);
     } else {
       [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Error: ' + (d.error || '?')));
     }
   })
-  .catch(() => {
-    [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Network error'));
-  });
+  .catch(() => [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Network error')));
 }
 
 async function saveAndNavigate(url) {
+  const n = countIncomplete();
+  if (n > 0) {
+    if (!confirm(`${n} attribute${n > 1 ? 's are' : ' is'} not yet judged. Proceed anyway?`)) return;
+  }
   const st1 = document.getElementById('saveStatus');
   if (st1) { st1.style.opacity = '1'; showSaveStatus(st1, 'saving', 'Saving…'); }
   try {
     await fetch(`/task1/{{ idx }}/save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(collectPayload()),
     });
-  } catch(e) { /* navigate even on error */ }
+  } catch(e) {}
   location.href = url;
 }
 
-// ── Jump modal ─────────────────────────────────────────────────────────────
+// ── Jump modal ─────────────────────────────────────────────────
 let jumpItems = [];
 function openJumpModal() {
   document.getElementById('jumpModal').classList.add('open');
   document.getElementById('jumpSearch').value = '';
   if (jumpItems.length === 0) {
-    fetch('/task1/list')
-      .then(r => r.json())
-      .then(data => {
-        jumpItems = data;
-        renderJumpList(data);
-      });
-  } else {
-    renderJumpList(jumpItems);
-  }
+    fetch('/task1/list').then(r => r.json()).then(data => { jumpItems = data; renderJumpList(data); });
+  } else { renderJumpList(jumpItems); }
   setTimeout(() => document.getElementById('jumpSearch').focus(), 50);
 }
-function closeJumpModal(e) {
-  document.getElementById('jumpModal').classList.remove('open');
-}
+function closeJumpModal() { document.getElementById('jumpModal').classList.remove('open'); }
 function filterJumpList() {
   const q = document.getElementById('jumpSearch').value.toLowerCase();
-  const filtered = jumpItems.filter(item =>
+  renderJumpList(jumpItems.filter(item =>
     String(item.line_index).includes(q) || item.user_id.toLowerCase().includes(q)
-  );
-  renderJumpList(filtered);
+  ));
 }
 function renderJumpList(items) {
   const list = document.getElementById('jumpList');
   if (!items.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:13px;">No results.</div>'; return; }
   list.innerHTML = items.slice(0, 200).map(item =>
-    `<div class="modal-item ${item.annotated ? 'annotated' : ''}" onclick="location.href='/task1/${item.line_index}'">
+    `<div class="modal-item ${item.annotated ? 'annotated' : ''}" onclick="closeJumpModal();saveAndNavigate('/task1/${item.line_index}')">
       <span class="modal-item-idx">#${item.line_index + 1}</span>
       <span class="modal-item-text" style="font-family:monospace;font-size:11px;">${item.user_id}</span>
       ${item.annotated ? '<span class="modal-check">✓</span>' : ''}
@@ -342,10 +379,9 @@ function renderJumpList(items) {
   ).join('');
 }
 
-// ── Keyboard shortcuts ─────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-  if (e.key === 'ArrowLeft' && {{ idx }} > 0) saveAndNavigate('/task1/{{ idx-1 }}');
+  if (e.key === 'ArrowLeft'  && {{ idx }} > 0)            saveAndNavigate('/task1/{{ idx-1 }}');
   if (e.key === 'ArrowRight' && {{ idx }} < {{ total-1 }}) saveAndNavigate('/task1/{{ idx+1 }}');
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAnnotation(); }
   if (e.key === 'j') openJumpModal();

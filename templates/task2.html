@@ -12,13 +12,12 @@
   background: #fafafa;
   transition: border-color .15s, background .15s;
 }
-
-/* Background tint by current rating */
 .cl-item.r-necessary_explicit { background: #dcfce7; border-color: #4ade80; }
 .cl-item.r-necessary_implicit { background: #f0fdf4; border-color: #86efac; }
 .cl-item.r-optional           { background: #fefce8; border-color: #fde047; }
 .cl-item.r-unnecessary        { background: #fafafa; border-color: #e5e7eb; opacity: .8; }
 .cl-item.r-forbidden          { background: #fff1f2; border-color: #fda4af; }
+.cl-item.r-none               { background: #fafafa; border-color: #e5e7eb; }
 
 .cl-attr-text {
   font-weight: 600;
@@ -31,20 +30,21 @@
   line-height: 1.4;
 }
 .cl-attr-label { flex: 1; min-width: 0; }
-.cl-behavior {
-  font-size: 12px;
-  color: #555;
-  line-height: 1.5;
-  margin-bottom: 7px;
-}
+.cl-behavior { font-size: 12px; color: #555; line-height: 1.5; margin-bottom: 7px; }
 
-/* ── Rating button group ───────────────────────────────────────────── */
-.rating-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 6px;
+/* ── Rating buttons ────────────────────────────────────────────────── */
+.rating-group { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.rating-group-detail { flex-direction: column; gap: 5px; }
+.rbtn-detail {
+  display: flex; flex-direction: column; align-items: flex-start;
+  white-space: normal !important; text-align: left;
+  padding: 5px 10px !important; gap: 2px;
 }
+.rbtn-detail .rbtn-label { font-weight: 600; font-size: 12px; }
+.rbtn-detail .rbtn-desc  { font-size: 11px; color: #6b7280; font-weight: 400; line-height: 1.3; }
+.rbtn-detail.active-necessary_explicit .rbtn-desc,
+.rbtn-detail.active-necessary_implicit .rbtn-desc { color: rgba(255,255,255,0.85); }
+.rbtn-detail.active-forbidden .rbtn-desc           { color: rgba(255,255,255,0.85); }
 .rbtn {
   padding: 3px 9px;
   border-radius: 5px;
@@ -58,50 +58,120 @@
   white-space: nowrap;
 }
 .rbtn:hover { background: #f3f4f6; border-color: #9ca3af; }
-
-/* Active states per rating */
-.rbtn.active-necessary_explicit {
-  background: #16a34a; border-color: #15803d; color: #fff; font-weight: 700;
-}
-.rbtn.active-necessary_implicit {
-  background: #4ade80; border-color: #16a34a; color: #14532d; font-weight: 700;
-}
-.rbtn.active-optional {
-  background: #facc15; border-color: #ca8a04; color: #713f12; font-weight: 700;
-}
-.rbtn.active-unnecessary {
-  background: #e5e7eb; border-color: #9ca3af; color: #374151; font-weight: 700;
-}
-.rbtn.active-forbidden {
-  background: #e11d48; border-color: #9f1239; color: #fff; font-weight: 700;
-}
+.rbtn.active-necessary_explicit { background: #16a34a; border-color: #15803d; color: #fff; font-weight: 700; }
+.rbtn.active-necessary_implicit { background: #4ade80; border-color: #16a34a; color: #14532d; font-weight: 700; }
+.rbtn.active-optional           { background: #facc15; border-color: #ca8a04; color: #713f12; font-weight: 700; }
+.rbtn.active-unnecessary        { background: #e5e7eb; border-color: #9ca3af; color: #374151; font-weight: 700; }
+.rbtn.active-forbidden          { background: #e11d48; border-color: #9f1239; color: #fff; font-weight: 700; }
 
 /* ── Tags ──────────────────────────────────────────────────────────── */
-.tag {
-  display: inline-block;
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+.tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; }
 .tag-model-rel { background: #dcfce7; color: #166534; }
 .tag-changed   { background: #fef3c7; color: #92400e; }
 .tag-rel-score { background: #fce7f3; color: #9d174d; }
 
 /* ── Section divider ───────────────────────────────────────────────── */
 .section-header {
-  font-size: 11px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: #888; margin: 14px 0 7px; padding-bottom: 4px;
+  border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Attributes panel title ────────────────────────────────────────── */
+.attrs-panel-title {
+  font-size: 13px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-  color: #888;
-  margin: 14px 0 7px;
-  padding-bottom: 4px;
+  color: #1e293b;
+  padding: 10px 14px 8px;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   gap: 8px;
+  background: #f8fafc;
+  border-radius: 8px 8px 0 0;
+}
+
+/* ── Instruction line ────────────────────────────────────────── */
+.instr-line {
+  font-size: 12px; color: #1e3a5f; margin-top: 8px; padding: 7px 10px;
+  border: 1px solid #bfdbfe; border-radius: 6px; background: #eff6ff; line-height: 1.5;
+}
+
+/* ── Flag button (in nav bar) ────────────────────────────────── */
+.flag-btn {
+  padding: 4px 10px; border-radius: 5px; border: 1.5px solid #fca5a5;
+  background: #fff; cursor: pointer; font-size: 11px; color: #b91c1c; font-weight: 500;
+  transition: all .15s; white-space: nowrap;
+}
+.flag-btn:hover, .flag-btn.active { background: #fee2e2; border-color: #dc2626; }
+.warn-badge { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
+
+/* ── Sticky nav bar ─────────────────────────────────────────────────── */
+.sticky-nav {
+  position: sticky;
+  top: 44px;
+  z-index: 50;
+  background: #f8fafc;
+  padding-bottom: 4px;
+}
+
+/* ── Two-column layout ──────────────────────────────────────────────── */
+.two-col-sticky {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
+
+/* ── Sticky column ──────────────────────────────────────────────────── */
+.sticky-col {
+  position: sticky;
+  top: 144px;
+  max-height: calc(100vh - 160px);
+  overflow-y: scroll;
+  padding-bottom: 32px;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
+  border-radius: 8px;
+}
+.sticky-col::-webkit-scrollbar       { width: 7px; }
+.sticky-col::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
+.sticky-col::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  /* Nav bar: smaller, tighter */
+  .sticky-nav { top: 38px; }
+  .sticky-nav .card { padding: 7px 10px; }
+  .sticky-nav .nav-bar { gap: 5px; }
+  .sticky-nav .btn-sm { padding: 3px 7px; font-size: 11px; }
+  .sticky-nav .progress-pill,
+  .sticky-nav .annotated-badge,
+  .sticky-nav .warn-badge,
+  .sticky-nav .flag-btn { font-size: 11px; padding: 2px 6px; }
+  /* Hide instruction in nav on mobile — too much vertical space */
+  .sticky-nav .instr-line { display: none; }
+
+  /* Sticky col becomes normal flow */
+  .sticky-col {
+    position: relative !important;
+    top: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* Rating buttons: full width on mobile for easier tapping */
+  .rating-group:not(.rating-group-detail) { flex-direction: column; }
+  .rating-group:not(.rating-group-detail) .rbtn { width: 100%; text-align: center; padding: 6px 10px; }
+
+  /* Slightly larger touch targets */
+  .rbtn { min-height: 34px; }
+  .judgment-btn { min-height: 34px; }
+
+  /* Prompt box: don't cap height on mobile */
+  .prompt-box { max-height: none; }
 }
 </style>
 {% endblock %}
@@ -109,52 +179,58 @@
 {% block body %}
 <div class="container">
 
-  <!-- Navigation bar -->
-  <div class="card" style="padding:12px 16px;">
-    <div class="nav-bar">
-      {% if idx > 0 %}
-        <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx-1) }}')">← Prev</button>
-      {% else %}
-        <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
-      {% endif %}
+  <!-- Sticky navigation bar -->
+  <div class="sticky-nav">
+    <div class="card" style="padding:10px 16px; margin-bottom:0;">
+      <div class="nav-bar">
+        {% if idx > 0 %}
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx-1) }}')">← Prev</button>
+        {% else %}
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
+        {% endif %}
 
-      <span class="nav-info">
-        Pair <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong>
-      </span>
-      <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
+        <span class="nav-info">Pair <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong></span>
+        <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
 
-      {% if existing %}
-        <span class="annotated-badge">✓ Annotated</span>
-      {% endif %}
+        {% if is_annotated %}<span class="annotated-badge">✓ Annotated</span>{% endif %}
 
-      <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
+        <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
 
-      {% if idx < total - 1 %}
-        <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx+1) }}')">Next →</button>
-      {% else %}
-        <span class="btn btn-secondary btn-sm" style="opacity:.4;">Next →</span>
-      {% endif %}
+        {% if idx < total - 1 %}
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx+1) }}')">Next →</button>
+        {% else %}
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">Next →</span>
+        {% endif %}
 
-      <span style="flex:1;"></span>
-      <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
-      <span id="saveStatus" class="save-status" style="opacity:0;"> </span>
+        <span style="flex:1;"></span>
+        <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
+        <button class="flag-btn {% if existing and existing.flagged %}active{% endif %}" id="flagBtn" onclick="toggleFlag()">🚩 Flag Uncomfortable</button>
+        <span id="saveStatus" class="save-status" style="opacity:0;"> </span>
+      </div>
+
+      <!-- Instruction -->
+      <div class="instr-line">
+        <strong>Instruction:</strong> Read the prompt on the left. Rate each profile attribute by how much it should influence the response, assuming you are a user with those profile attributes.
+      </div>
     </div>
   </div>
 
   <!-- Meta -->
-  <div class="card" style="padding:10px 16px;">
+  <div class="card" style="padding:10px 16px; margin-top:8px;">
     <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
       <span class="user-id-chip">{{ user_id }}</span>
       <span class="badge badge-gray">Prompt #{{ prompt_index }}</span>
       <span class="badge badge-blue">{{ profile_attrs|length }} profile attrs</span>
-      <span class="badge badge-green">{{ items|length }} model-relevant</span>
+      {% if not annotator_mode %}
+        <span class="badge badge-green">{{ items|length }} model-relevant</span>
+      {% endif %}
     </div>
   </div>
 
-  <div class="two-col">
+  <div class="two-col-sticky" style="margin-top:12px;">
 
-    <!-- Left: Prompt + Legend -->
-    <div>
+    <!-- Left: Prompt + Legend (sticky) -->
+    <div class="sticky-col">
       <div class="card">
         <div class="card-title">Prompt</div>
         <div class="prompt-box">{{ prompt_text }}</div>
@@ -162,113 +238,145 @@
 
       <div class="card" style="padding:12px 16px;">
         <div class="card-title">Rating Scale</div>
-        <div style="display:flex; flex-direction:column; gap:7px; font-size:12px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="rbtn active-necessary_explicit" style="cursor:default;">Necessary &amp; Explicit</span>
-            <span>Response must clearly use this attribute.</span>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:12px;">
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="rbtn active-necessary_explicit" style="cursor:default; flex-shrink:0;">Explicitly Impact</span>
+            <span>The response should directly adapt to and explicitly acknowledge this attribute.</span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="rbtn active-necessary_implicit" style="cursor:default;">Necessary &amp; Implicit</span>
-            <span>Response should consider it, but not necessarily mention it.</span>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="rbtn active-necessary_implicit" style="cursor:default; flex-shrink:0;">Implicitly Impact</span>
+            <span>The response should be influenced by this attribute, but without mentioning it directly.</span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="rbtn active-optional" style="cursor:default;">Optional</span>
-            <span>Response may use it, but it's not required.</span>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="rbtn active-optional" style="cursor:default; flex-shrink:0;">Optional</span>
+            <span>Could theoretically apply, but including or excluding it makes little difference.</span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="rbtn active-unnecessary" style="cursor:default;">Unnecessary</span>
-            <span>Should not influence the response.</span>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="rbtn active-unnecessary" style="cursor:default; flex-shrink:0;">Irrelevant</span>
+            <span>Completely unrelated to this prompt; should have no influence on the response.</span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span class="rbtn active-forbidden" style="cursor:default;">Forbidden</span>
-            <span>Response should avoid using this information.</span>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="rbtn active-forbidden" style="cursor:default; flex-shrink:0;">Avoid</span>
+            <span>Response should actively avoid using this information — including it would be inappropriate.</span>
           </div>
-        </div>
-        <div style="margin-top:10px; padding-top:8px; border-top:1px solid #eee; font-size:11px; color:#888;">
-          Top 3 = Relevant &nbsp;|&nbsp; Bottom 2 = Irrelevant<br>
-          Attributes marked <span class="tag tag-model-rel">model: relevant</span> were selected by the model (default: Optional).
-          Others default to Unnecessary.
         </div>
       </div>
 
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      {% if not annotator_mode %}
+      <div style="padding: 0 2px;">
         <button class="btn btn-secondary btn-sm" onclick="resetAllToDefault()">↺ Reset all to defaults</button>
       </div>
+      {% endif %}
     </div>
 
-    <!-- Right: All profile attributes with rating groups -->
+    <!-- Right: All profile attributes -->
     <div>
-      <!-- Model-relevant section -->
-      {% set rel_count = items|length %}
-      {% set other_count = profile_attrs|length - rel_count %}
-
-      {% if rel_count > 0 %}
-      <div class="section-header">
-        Model-relevant attributes
-        <span class="badge badge-green">{{ rel_count }}</span>
-      </div>
-      {% endif %}
-
-      <div id="checklistItems">
-        {% for attr in profile_attrs %}
-        {% set item = items_by_attr.get(attr.attribute) %}
-        {% set was_rel = item is not none %}
-        {% set default_rating = "necessary_explicit" if was_rel else "unnecessary" %}
-
-        {% if not was_rel and loop.index0 == rel_count %}
-        <div class="section-header" style="margin-top:18px;">
-          Other attributes
-          <span class="badge badge-gray">{{ other_count }}</span>
+      <!-- Panel title -->
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; overflow: hidden;">
+        <div class="attrs-panel-title">
+          Profile Attributes
+          <span class="badge badge-blue" style="font-size:11px;">{{ profile_attrs|length }}</span>
+          {% if not annotator_mode %}
+            <span style="font-size:11px; color:#888; font-weight:400; margin-left:4px;">— rate how each should influence the response to this prompt</span>
+          {% else %}
+            <span style="font-size:11px; color:#888; font-weight:400; margin-left:4px;">— rate how each should influence the response to this prompt</span>
+          {% endif %}
         </div>
-        {% endif %}
+        <div style="padding: 10px 10px 4px;">
 
-        <div class="cl-item r-{{ default_rating }}" id="cl-{{ loop.index0 }}"
-             data-default="{{ default_rating }}" data-was-rel="{{ 'true' if was_rel else 'false' }}">
-          <div class="cl-attr-text">
-            <span class="cl-attr-label">{{ attr.attribute }}</span>
-            {% if was_rel %}
-              <span class="tag tag-model-rel">model: relevant</span>
-              {% if item.relevance %}
-                <span class="tag tag-rel-score">rel: {{ "%.2f"|format(item.relevance|float) }}</span>
-              {% endif %}
-            {% endif %}
-            <span class="tag tag-changed" id="changed-{{ loop.index0 }}" style="display:none;">changed</span>
-          </div>
+          {% set rel_count = items|length %}
+          {% set other_count = profile_attrs|length - rel_count %}
 
-          {% if was_rel and item.expected_behavior %}
-          <div class="cl-behavior">
-            <em>Expected:</em>
-            {{ item.expected_behavior[:300] }}{% if item.expected_behavior|length > 300 %}…{% endif %}
+          {% if not annotator_mode and rel_count > 0 %}
+          <div class="section-header">
+            Model-relevant
+            <span class="badge badge-green">{{ rel_count }}</span>
           </div>
           {% endif %}
 
-          <div class="rating-group" id="rg-{{ loop.index0 }}">
-            <button class="rbtn {% if default_rating == 'necessary_explicit' %}active-necessary_explicit{% endif %}"
-              data-val="necessary_explicit"
-              onclick="setRating({{ loop.index0 }}, 'necessary_explicit', this)">Necessary &amp; Explicit</button>
-            <button class="rbtn" data-val="necessary_implicit"
-              onclick="setRating({{ loop.index0 }}, 'necessary_implicit', this)">Necessary &amp; Implicit</button>
-            <button class="rbtn {% if default_rating == 'optional' %}active-optional{% endif %}"
-              data-val="optional"
-              onclick="setRating({{ loop.index0 }}, 'optional', this)">Optional</button>
-            <button class="rbtn {% if default_rating == 'unnecessary' %}active-unnecessary{% endif %}"
-              data-val="unnecessary"
-              onclick="setRating({{ loop.index0 }}, 'unnecessary', this)">Unnecessary</button>
-            <button class="rbtn" data-val="forbidden"
-              onclick="setRating({{ loop.index0 }}, 'forbidden', this)">Forbidden</button>
+          <div id="checklistItems">
+            {% for attr in profile_attrs %}
+            {% set item = items_by_attr.get(attr.attribute) %}
+            {% set was_rel = item is not none %}
+
+            {% if annotator_mode %}
+              {% set initial_rating = "none" %}
+              {% set default_rating = "none" %}
+            {% else %}
+              {% set default_rating = "necessary_explicit" if was_rel else "unnecessary" %}
+              {% set initial_rating = default_rating %}
+            {% endif %}
+
+            {% if not annotator_mode and not was_rel and loop.index0 == rel_count %}
+            <div class="section-header" style="margin-top:18px;">
+              Other attributes
+              <span class="badge badge-gray">{{ other_count }}</span>
+            </div>
+            {% endif %}
+
+            <div class="cl-item r-{{ initial_rating }}" id="cl-{{ loop.index0 }}"
+                 data-default="{{ default_rating }}" data-was-rel="{{ 'true' if was_rel else 'false' }}">
+              <div class="cl-attr-text">
+                <span class="cl-attr-label">{{ attr.attribute }}</span>
+                {% if not annotator_mode %}
+                  {% if was_rel %}
+                    <span class="tag tag-model-rel">model: relevant</span>
+                    {% if item.relevance %}
+                      <span class="tag tag-rel-score">rel: {{ "%.2f"|format(item.relevance|float) }}</span>
+                    {% endif %}
+                  {% endif %}
+                  <span class="tag tag-changed" id="changed-{{ loop.index0 }}" style="display:none;">changed</span>
+                {% endif %}
+              </div>
+
+              {% if not annotator_mode and was_rel and item.expected_behavior %}
+              <div class="cl-behavior">
+                <em>Expected:</em>
+                {{ item.expected_behavior[:300] }}{% if item.expected_behavior|length > 300 %}…{% endif %}
+              </div>
+              {% endif %}
+
+              {% set attr_idx = loop.index0 %}
+              <div class="rating-group{% if show_option_detail %} rating-group-detail{% endif %}" id="rg-{{ attr_idx }}">
+                {% set opts = [
+                  ("necessary_explicit", "Explicitly Impact", "The response should directly adapt to and explicitly acknowledge this attribute."),
+                  ("necessary_implicit", "Implicitly Impact",  "The response should be influenced by this attribute, but without mentioning it directly."),
+                  ("optional",           "Optional",          "Could theoretically apply, but including or excluding it makes little difference."),
+                  ("unnecessary",        "Irrelevant",        "Completely unrelated to this prompt; should have no influence on the response."),
+                  ("forbidden",          "Avoid",             "Response should actively avoid using this information — including it would be inappropriate."),
+                ] %}
+                {% for val, label, desc in opts %}
+                  {% if show_option_detail %}
+                  <button class="rbtn rbtn-detail" data-val="{{ val }}"
+                    onclick="setRating({{ attr_idx }}, '{{ val }}', this)">
+                    <span class="rbtn-label">{{ label }}</span>
+                    <span class="rbtn-desc">{{ desc }}</span>
+                  </button>
+                  {% else %}
+                  <button class="rbtn" data-val="{{ val }}"
+                    onclick="setRating({{ attr_idx }}, '{{ val }}', this)">{{ label }}</button>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
           </div>
+
         </div>
-        {% endfor %}
       </div>
 
-      <div style="margin-top:16px; padding-top:12px; border-top:1px solid #e5e7eb;">
+      <div style="margin-top:4px; padding-top:12px; border-top:1px solid #e5e7eb;">
         <div class="card-title" style="padding:0 0 6px 0;">Note</div>
         <textarea class="note-area" id="annotNote"
           placeholder="Any overall comments about this pair's relevance annotations..."
         >{{ existing.note if existing else '' }}</textarea>
-        <div style="margin-top:10px; display:flex; gap:10px; align-items:center;">
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <button class="btn btn-success" onclick="saveAnnotation()">💾 Save Annotation</button>
+          {% if idx < total - 1 %}
+          <button class="btn btn-primary" onclick="saveAndNavigate('/task2/{{ idx+1 }}')">💾 Save &amp; Next →</button>
+          {% endif %}
           <span id="saveStatus2" class="save-status" style="opacity:0;"> </span>
+          <span id="incompleteWarn" class="warn-badge" style="display:none;"></span>
         </div>
       </div>
     </div>
@@ -295,19 +403,18 @@
 
 {% block extra_js %}
 <script>
-// ── Constants ──────────────────────────────────────────────────────────────
 const RELEVANT_RATINGS = new Set(['necessary_explicit', 'necessary_implicit', 'optional']);
 const RATINGS = ['necessary_explicit', 'necessary_implicit', 'optional', 'unnecessary', 'forbidden'];
+const ANNOTATOR_MODE = {{ 'true' if annotator_mode else 'false' }};
+let isFlagged = {{ 'true' if existing and existing.flagged else 'false' }};
 
-// ── Data ───────────────────────────────────────────────────────────────────
 const profileAttrs = {{ profile_attrs | tojson }};
 const itemsByAttr  = {{ items_by_attr | tojson }};
 
-// defaultRating[i]: 'necessary_explicit' if model-relevant, else 'unnecessary'
 const defaultRatings = profileAttrs.map(a =>
-  itemsByAttr.hasOwnProperty(a.attribute) ? 'necessary_explicit' : 'unnecessary'
+  ANNOTATOR_MODE ? 'none'
+    : (itemsByAttr.hasOwnProperty(a.attribute) ? 'necessary_explicit' : 'unnecessary')
 );
-// currentRatings[i]: annotator's current choice (starts at default)
 const currentRatings = [...defaultRatings];
 
 // ── Restore existing annotation ────────────────────────────────────────────
@@ -315,54 +422,68 @@ const currentRatings = [...defaultRatings];
 const existingRel = {{ existing.relevance_judgments | tojson }};
 const existingByAttr = {};
 existingRel.forEach(r => { if (r && r.attribute) existingByAttr[r.attribute] = r; });
-
 document.addEventListener('DOMContentLoaded', () => {
   profileAttrs.forEach((a, i) => {
     const r = existingByAttr[a.attribute];
-    if (r && r.rating && RATINGS.includes(r.rating)) {
+    if (r && r.rating && (RATINGS.includes(r.rating) || r.rating === 'none')) {
       currentRatings[i] = r.rating;
       applyRatingUI(i, r.rating);
     }
   });
+  updateIncompleteWarn();
 });
+{% else %}
+document.addEventListener('DOMContentLoaded', updateIncompleteWarn);
 {% endif %}
 
-// ── Rating logic ───────────────────────────────────────────────────────────
+// ── Incomplete check ───────────────────────────────────────────
+function countIncomplete() {
+  return currentRatings.filter(r => r === 'none').length;
+}
+function updateIncompleteWarn() {
+  const n = countIncomplete();
+  const el = document.getElementById('incompleteWarn');
+  if (n > 0) { el.textContent = `${n} attribute${n > 1 ? 's' : ''} not yet rated`; el.style.display = 'inline'; }
+  else { el.style.display = 'none'; }
+}
+
+// ── Flag ───────────────────────────────────────────────────────
+function toggleFlag() {
+  isFlagged = !isFlagged;
+  document.getElementById('flagBtn').classList.toggle('active', isFlagged);
+  document.getElementById('flagReason').style.display = isFlagged ? 'inline-block' : 'none';
+}
+
 function setRating(idx, val, btn) {
-  currentRatings[idx] = val;
-  applyRatingUI(idx, val);
+  if (currentRatings[idx] === val) {
+    currentRatings[idx] = 'none';
+    applyRatingUI(idx, 'none');
+  } else {
+    currentRatings[idx] = val;
+    applyRatingUI(idx, val);
+  }
+  updateIncompleteWarn();
 }
 
 function applyRatingUI(idx, val) {
-  // Update card background
   const card = document.getElementById(`cl-${idx}`);
   card.className = card.className.replace(/\br-\S+/g, '').trim() + ` r-${val}`;
 
-  // Update button active states
-  const group = document.getElementById(`rg-${idx}`);
-  group.querySelectorAll('.rbtn').forEach(b => {
-    // Strip all active classes
+  document.getElementById(`rg-${idx}`).querySelectorAll('.rbtn').forEach(b => {
     b.className = b.className.replace(/\bactive-\S+/g, '').trim();
-    if (b.dataset.val === val) {
-      b.classList.add(`active-${val}`);
-    }
+    if (val !== 'none' && b.dataset.val === val) b.classList.add(`active-${val}`);
   });
 
-  // Changed marker
-  const changed = val !== defaultRatings[idx];
-  const marker = document.getElementById(`changed-${idx}`);
-  if (marker) marker.style.display = changed ? 'inline' : 'none';
+  if (!ANNOTATOR_MODE) {
+    const marker = document.getElementById(`changed-${idx}`);
+    if (marker) marker.style.display = (val !== defaultRatings[idx]) ? 'inline' : 'none';
+  }
 }
 
-// ── Reset to defaults ──────────────────────────────────────────────────────
 function resetAllToDefault() {
-  profileAttrs.forEach((_, i) => {
-    currentRatings[i] = defaultRatings[i];
-    applyRatingUI(i, defaultRatings[i]);
-  });
+  profileAttrs.forEach((_, i) => { currentRatings[i] = defaultRatings[i]; applyRatingUI(i, defaultRatings[i]); });
 }
 
-// ── Save ───────────────────────────────────────────────────────────────────
 function collectPayload() {
   return {
     relevance_judgments: profileAttrs.map((attr, i) => {
@@ -372,14 +493,15 @@ function collectPayload() {
         attribute:         attr.attribute,
         was_relevant:      itemsByAttr.hasOwnProperty(attr.attribute),
         default_rating:    defaultRatings[i],
-        rating:            rating,
+        rating,
         is_relevant:       RELEVANT_RATINGS.has(rating),
         changed:           rating !== defaultRatings[i],
         expected_behavior: itemData.expected_behavior || '',
         relevance_score:   itemData.relevance || null,
       };
     }),
-    note: document.getElementById('annotNote').value,
+    note:    document.getElementById('annotNote').value,
+    flagged: isFlagged,
   };
 }
 
@@ -388,69 +510,63 @@ function saveAnnotation() {
   const st2 = document.getElementById('saveStatus2');
   [st1, st2].forEach(s => { s.style.opacity = '1'; showSaveStatus(s, 'saving', 'Saving…'); });
   fetch(`/task2/{{ idx }}/save`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(collectPayload()),
   })
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
-      [st1, st2].forEach(s => showSaveStatus(s, 'saved', '✓ Saved'));
+      const n = countIncomplete();
+      const msg = n > 0 ? `✓ Saved (${n} attr${n>1?'s':''} unrated)` : '✓ Saved';
+      const type = n > 0 ? 'warning' : 'saved';
+      [st1, st2].forEach(s => showSaveStatus(s, type, msg));
       setTimeout(() => [st1, st2].forEach(s => s.style.opacity = '0'), 3000);
     } else {
       [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Error: ' + (d.error || '?')));
     }
   })
-  .catch(() => {
-    [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Network error'));
-  });
+  .catch(() => [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Network error')));
 }
 
 async function saveAndNavigate(url) {
+  const n = countIncomplete();
+  if (n > 0) {
+    if (!confirm(`${n} attribute${n > 1 ? 's are' : ' is'} not yet rated. Proceed anyway?`)) return;
+  }
   const st1 = document.getElementById('saveStatus');
   if (st1) { st1.style.opacity = '1'; showSaveStatus(st1, 'saving', 'Saving…'); }
   try {
     await fetch(`/task2/{{ idx }}/save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(collectPayload()),
     });
-  } catch(e) { /* navigate even on error */ }
+  } catch(e) {}
   location.href = url;
 }
 
-// ── Jump modal ─────────────────────────────────────────────────────────────
 let jumpItems = [];
 function openJumpModal() {
   document.getElementById('jumpModal').classList.add('open');
   document.getElementById('jumpSearch').value = '';
   if (jumpItems.length === 0) {
     fetch('/task2/list').then(r => r.json()).then(data => { jumpItems = data; renderJumpList(data); });
-  } else {
-    renderJumpList(jumpItems);
-  }
+  } else { renderJumpList(jumpItems); }
   setTimeout(() => document.getElementById('jumpSearch').focus(), 50);
 }
-function closeJumpModal(e) {
-  document.getElementById('jumpModal').classList.remove('open');
-}
+function closeJumpModal() { document.getElementById('jumpModal').classList.remove('open'); }
 function filterJumpList() {
   const q = document.getElementById('jumpSearch').value.toLowerCase();
-  const filtered = jumpItems.filter(item =>
+  renderJumpList(jumpItems.filter(item =>
     String(item.annotation_index).includes(q) ||
     item.user_id.toLowerCase().includes(q) ||
     (item.prompt_snippet || '').toLowerCase().includes(q)
-  );
-  renderJumpList(filtered);
+  ));
 }
 function renderJumpList(items) {
   const list = document.getElementById('jumpList');
-  if (!items.length) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:13px;">No results.</div>';
-    return;
-  }
+  if (!items.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:13px;">No results.</div>'; return; }
   list.innerHTML = items.slice(0, 300).map(item =>
-    `<div class="modal-item ${item.annotated ? 'annotated' : ''}" onclick="location.href='/task2/${item.annotation_index}'">
+    `<div class="modal-item ${item.annotated ? 'annotated' : ''}" onclick="closeJumpModal();saveAndNavigate('/task2/${item.annotation_index}')">
       <span class="modal-item-idx">#${item.annotation_index + 1}</span>
       <div style="flex:1;">
         <div class="modal-item-text">${escHtml(item.prompt_snippet || '')}${item.prompt_snippet && item.prompt_snippet.length >= 120 ? '…' : ''}</div>
@@ -464,10 +580,9 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Keyboard shortcuts ─────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
-  if (e.key === 'ArrowLeft' && {{ idx }} > 0) saveAndNavigate('/task2/{{ idx-1 }}');
+  if (e.key === 'ArrowLeft'  && {{ idx }} > 0)            saveAndNavigate('/task2/{{ idx-1 }}');
   if (e.key === 'ArrowRight' && {{ idx }} < {{ total-1 }}) saveAndNavigate('/task2/{{ idx+1 }}');
   if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveAnnotation(); }
   if (e.key === 'j') openJumpModal();

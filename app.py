@@ -35,6 +35,7 @@ from flask import (
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent
 INDEX_DIR   = BASE_DIR / "data" / "indexes"
+EXTRACT_DIR = BASE_DIR / "data" / "extracted"
 ANNOT_DIR   = BASE_DIR / "data" / "annotations"
 ANNOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -47,6 +48,19 @@ ATTRS_INDEX_DB      = INDEX_DIR / "attrs_index.db"
 CHECKLIST_INDEX_DB  = INDEX_DIR / "checklist_index.db"
 CONVS_INDEX_DB      = INDEX_DIR / "convs_index.db"
 
+# Extracted portable files — produced by: python3 build_index.py --extract
+# Everything lives inside annotation_tool/data/extracted/, so copying the
+# annotation_tool/ folder to AWS is all that's needed.
+EXTRACT_DIR         = BASE_DIR / "data" / "extracted"
+EXTRACTED_ATTRS     = EXTRACT_DIR / "attrs.jsonl"
+EXTRACTED_CHECKLIST = EXTRACT_DIR / "checklist_sample.jsonl"
+EXTRACTED_CONVS     = EXTRACT_DIR / "convs.jsonl"
+
+# Extracted portable files (used on AWS instead of large source files + SQLite indexes)
+EXTRACTED_ATTRS      = EXTRACT_DIR / "attrs.jsonl"
+EXTRACTED_CHECKLIST  = EXTRACT_DIR / "checklist_sample.jsonl"
+EXTRACTED_CONVS      = EXTRACT_DIR / "convs.jsonl"
+
 # ─── Flask setup ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = "annotation-tool-secret-2024"
@@ -56,7 +70,60 @@ app.secret_key = "annotation-tool-secret-2024"
 def inject_annotator():
     return {"current_annotator": annotator_name()}
 
-# ─── File handles (open once, seek on demand) ─────────────────────────────────
+# ─── Extracted data (loaded at startup when data/extracted/ files are present) ─
+# When available these replace the large source files + SQLite indexes entirely.
+# data/extracted/ lives inside the annotation_tool folder — just copy the whole
+# folder to AWS and the app works without any large source files.
+
+_using_extracted:   bool              = False
+_attrs_list:        List[Dict]        = []   # indexed by line_index
+_checklist_list:    List[Dict]        = []   # indexed by sample_index
+_convs_offsets:     Dict[str, List]   = {}   # hashed_ip -> [byte_offsets in extracted convs.jsonl]
+_convs_exfh:        Optional[Any]     = None
+
+
+def _load_extracted() -> None:
+    global _using_extracted, _attrs_list, _checklist_list, _convs_offsets, _convs_exfh
+    if not (EXTRACTED_ATTRS.exists() and EXTRACTED_CHECKLIST.exists() and EXTRACTED_CONVS.exists()):
+        return
+    print("Loading extracted data files...", flush=True)
+
+    with open(EXTRACTED_ATTRS, "r", encoding="utf-8") as f:
+        _attrs_list = [json.loads(ln) for ln in f if ln.strip()]
+    _attrs_list.sort(key=lambda r: r.get("line_index", 0))
+
+    with open(EXTRACTED_CHECKLIST, "r", encoding="utf-8") as f:
+        _checklist_list = [json.loads(ln) for ln in f if ln.strip()]
+    _checklist_list.sort(key=lambda r: r.get("sample_index", 0))
+
+    # Build in-memory offset index for convs (seek on demand — avoids loading full text into RAM)
+    _convs_offsets = {}
+    with open(EXTRACTED_CONVS, "rb") as f:
+        while True:
+            offset = f.tell()
+            line = f.readline()
+            if not line:
+                break
+            try:
+                uid = json.loads(line).get("hashed_ip", "")
+                if uid:
+                    _convs_offsets.setdefault(uid, []).append(offset)
+            except Exception:
+                continue
+    _convs_exfh = open(EXTRACTED_CONVS, "rb")
+
+    _using_extracted = True
+    print(
+        f"Loaded: {len(_attrs_list)} attrs, {len(_checklist_list)} checklist, "
+        f"{len(_convs_offsets)} users with convs",
+        flush=True,
+    )
+
+
+_load_extracted()
+
+
+# ─── File handles (open once, seek on demand) — used only when NOT using extracted ──
 _attrs_fh:    Optional[Any] = None
 _checklist_fh: Optional[Any] = None
 _convs_fh:    Optional[Any] = None
@@ -90,6 +157,8 @@ def index_ready(db_path: Path) -> bool:
 
 
 def attrs_count() -> int:
+    if _using_extracted:
+        return len(_attrs_list)
     if not index_ready(ATTRS_INDEX_DB):
         return 0
     with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=10) as conn:
@@ -103,6 +172,8 @@ def _checklist_has_sample(conn) -> bool:
 
 
 def checklist_count() -> int:
+    if _using_extracted:
+        return len(_checklist_list)
     if not index_ready(CHECKLIST_INDEX_DB):
         return 0
     with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=10) as conn:
@@ -112,7 +183,10 @@ def checklist_count() -> int:
 
 
 def fetch_attrs_record(line_index: int) -> Optional[Dict]:
-    """Fetch one attrs record by its sequential line_index."""
+    if _using_extracted:
+        if 0 <= line_index < len(_attrs_list):
+            return _attrs_list[line_index]
+        return None
     if not index_ready(ATTRS_INDEX_DB):
         return None
     with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=10) as conn:
@@ -127,7 +201,10 @@ def fetch_attrs_record(line_index: int) -> Optional[Dict]:
 
 
 def fetch_checklist_record(sample_index: int) -> Optional[Dict]:
-    """Fetch one checklist record by sample_index (via checklist_sample if available)."""
+    if _using_extracted:
+        if 0 <= sample_index < len(_checklist_list):
+            return _checklist_list[sample_index]
+        return None
     if not index_ready(CHECKLIST_INDEX_DB):
         return None
     with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=10) as conn:
@@ -151,7 +228,15 @@ def fetch_checklist_record(sample_index: int) -> Optional[Dict]:
 
 
 def fetch_user_conversations(user_id: str) -> List[Dict]:
-    """Fetch all conversation records for a user_id (hashed_ip)."""
+    if _using_extracted:
+        results = []
+        for offset in _convs_offsets.get(user_id, []):
+            _convs_exfh.seek(offset)
+            try:
+                results.append(json.loads(_convs_exfh.readline()))
+            except Exception:
+                continue
+        return results
     if not index_ready(CONVS_INDEX_DB):
         return []
     with sqlite3.connect(str(CONVS_INDEX_DB), timeout=10) as conn:
@@ -173,7 +258,16 @@ def fetch_user_conversations(user_id: str) -> List[Dict]:
 
 
 def get_checklist_meta_list() -> List[Dict]:
-    """Return lightweight list of checklist records for the jump navigator."""
+    if _using_extracted:
+        return [
+            {
+                "annotation_index": r["sample_index"],
+                "user_id": r.get("user_id", ""),
+                "prompt_index": r.get("prompt_index", -1),
+                "prompt_snippet": (r.get("prompt_text") or "")[:120],
+            }
+            for r in _checklist_list
+        ]
     if not index_ready(CHECKLIST_INDEX_DB):
         return []
     with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=10) as conn:
@@ -195,7 +289,8 @@ def get_checklist_meta_list() -> List[Dict]:
 
 
 def get_attrs_meta_list() -> List[Dict]:
-    """Return lightweight list of attrs records for the jump navigator."""
+    if _using_extracted:
+        return [{"line_index": r["line_index"], "user_id": r.get("user_id", "")} for r in _attrs_list]
     if not index_ready(ATTRS_INDEX_DB):
         return []
     with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=10) as conn:
@@ -257,7 +352,8 @@ def save_annotation(task: str, record: Dict) -> None:
 
 # ─── Conversation HTML builder (adapted from visualize_score_assistant_like_usage.py) ──
 
-def build_chat_html(conversations: Any, max_turns: int = 60, short_chars: int = 200, long_chars: int = 800) -> str:
+def build_chat_html(conversations: Any, max_convs: int = 50, max_turns_per_conv: int = 30,
+                    short_chars: int = 200, long_chars: int = 1600) -> str:
     if not conversations:
         return '<div class="chat-empty">No messages.</div>'
 
@@ -268,15 +364,19 @@ def build_chat_html(conversations: Any, max_turns: int = 60, short_chars: int = 
 
     html_parts: List[str] = []
     turns_shown = 0
+    truncated = False
 
     for c_idx, conv_turns in enumerate(convs or []):
-        if turns_shown >= max_turns:
+        if c_idx >= max_convs:
+            truncated = True
             break
         if len(convs) > 1:
             html_parts.append(f'<div class="conv-label">Conversation {c_idx + 1}</div>')
 
+        turns_in_conv = 0
         for turn in conv_turns:
-            if turns_shown >= max_turns:
+            if turns_in_conv >= max_turns_per_conv:
+                html_parts.append('<div class="chat-more-hint">… more turns in this conversation not shown.</div>')
                 break
             if not isinstance(turn, dict):
                 continue
@@ -288,30 +388,34 @@ def build_chat_html(conversations: Any, max_turns: int = 60, short_chars: int = 
             role_class = "msg-user" if role == "USER" else (
                 "msg-assistant" if role in {"ASSISTANT", "SYSTEM", "TOOL"} else "msg-other"
             )
-            short_text = text[:short_chars] + ("..." if len(text) > short_chars else "")
-            long_text  = text[:long_chars]  + ("..." if len(text) > long_chars  else "")
+            hint = (
+                ' <span style="font-style:italic;font-size:10px;color:#2563eb;'
+                'background:#dbeafe;border-radius:3px;padding:1px 4px;margin-left:4px;">'
+                '↕ click to expand</span>'
+            )
+            short_text = html.escape(text[:short_chars]) + (hint if len(text) > short_chars else "")
+            long_text  = html.escape(text[:long_chars])  + (html.escape("…") if len(text) > long_chars else "")
 
-            safe_role  = html.escape(role)
-            safe_short = html.escape(short_text)
-            safe_long  = html.escape(long_text)
+            safe_role = html.escape(role)
 
             html_parts.append(
                 f'<details class="msg-details">'
                 f'<summary><div class="msg {role_class}">'
                 f'<div class="msg-role">{safe_role}</div>'
-                f'<div class="msg-text">{safe_short}</div>'
+                f'<div class="msg-text">{short_text}</div>'
                 f'</div></summary>'
                 f'<div class="msg-long"><div class="msg {role_class} msg-expanded">'
                 f'<div class="msg-role">{safe_role} (full)</div>'
-                f'<div class="msg-text">{safe_long}</div>'
+                f'<div class="msg-text">{long_text}</div>'
                 f'</div></div></details>'
             )
+            turns_in_conv += 1
             turns_shown += 1
 
     if turns_shown == 0:
         return '<div class="chat-empty">No messages.</div>'
-    if turns_shown >= max_turns:
-        html_parts.append('<div class="chat-more-hint">Preview truncated.</div>')
+    if truncated:
+        html_parts.append(f'<div class="chat-more-hint">Showing first {max_convs} of {len(convs)} conversations.</div>')
     return "".join(html_parts)
 
 
@@ -339,8 +443,8 @@ def task_select():
         return redirect(url_for("index"))
     t1_count = attrs_count()
     t2_count = checklist_count()
-    t1_ready = index_ready(ATTRS_INDEX_DB) and index_ready(CONVS_INDEX_DB)
-    t2_ready = index_ready(CHECKLIST_INDEX_DB)
+    t1_ready = _using_extracted or (index_ready(ATTRS_INDEX_DB) and index_ready(CONVS_INDEX_DB))
+    t2_ready = _using_extracted or index_ready(CHECKLIST_INDEX_DB)
     return render_template(
         "select.html",
         annotator=annotator_name(),
@@ -387,15 +491,32 @@ def task1_view(idx: int):
     for cr in conv_records:
         conv = cr.get("conversation")
         ch = build_chat_html(conv) if conv else '<div class="chat-empty">No conversation data.</div>'
+        model_raw = cr.get("model", "")
+        if isinstance(model_raw, list):
+            model_display = ", ".join(dict.fromkeys(m for m in model_raw if m))
+        else:
+            model_display = model_raw or ""
         conv_htmls.append({
             "conversation_hash": cr.get("conversation_hash", ""),
-            "model": cr.get("model", ""),
+            "model": model_display,
             "timestamp": cr.get("timestamp", ""),
             "html": ch,
         })
 
     # Load existing annotation for this index
     existing = load_existing_annotations("1").get(str(idx))
+
+    # ✓ Annotated only when flagged OR every attribute has been judged
+    if existing and existing.get("flagged"):
+        is_annotated = True
+    elif existing:
+        judgments = existing.get("attr_judgments", [])
+        is_annotated = (
+            len(judgments) == len(merged_attrs) and
+            all(j.get("judgment") for j in judgments)
+        )
+    else:
+        is_annotated = False
 
     return render_template(
         "task1.html",
@@ -406,6 +527,9 @@ def task1_view(idx: int):
         conv_htmls=conv_htmls,
         annotator=annotator_name(),
         existing=existing,
+        is_annotated=is_annotated,
+        annotator_mode=app.config.get("ANNOTATOR_MODE", True),
+        show_option_detail=app.config.get("SHOW_OPTION_DETAIL", False),
     )
 
 
@@ -426,6 +550,7 @@ def task1_save(idx: int):
         "attr_judgments": data.get("attr_judgments", []),
         "missing_attrs": data.get("missing_attrs", ""),
         "overall_note": data.get("overall_note", ""),
+        "flagged": data.get("flagged", False),
     }
     save_annotation("1", record)
     return jsonify({"ok": True})
@@ -439,7 +564,14 @@ def task1_list():
     meta = get_attrs_meta_list()
     existing = load_existing_annotations("1")
     for m in meta:
-        m["annotated"] = str(m["line_index"]) in existing
+        rec = existing.get(str(m["line_index"]))
+        if rec and rec.get("flagged"):
+            m["annotated"] = True
+        elif rec:
+            judgments = rec.get("attr_judgments", [])
+            m["annotated"] = bool(judgments) and all(j.get("judgment") for j in judgments)
+        else:
+            m["annotated"] = False
     return jsonify(meta)
 
 
@@ -488,6 +620,18 @@ def task2_view(idx: int):
     # Load existing annotation
     existing = load_existing_annotations("2").get(str(idx))
 
+    # ✓ Annotated only when flagged OR every attribute has been rated (not 'none')
+    if existing and existing.get("flagged"):
+        is_annotated = True
+    elif existing:
+        judgments = existing.get("relevance_judgments", [])
+        is_annotated = (
+            len(judgments) == len(profile_attrs) and
+            all(j.get("rating") not in (None, "none", "") for j in judgments)
+        )
+    else:
+        is_annotated = False
+
     return render_template(
         "task2.html",
         idx=idx,
@@ -500,6 +644,9 @@ def task2_view(idx: int):
         items_by_attr=items_by_attr,
         annotator=annotator_name(),
         existing=existing,
+        is_annotated=is_annotated,
+        annotator_mode=app.config.get("ANNOTATOR_MODE", True),
+        show_option_detail=app.config.get("SHOW_OPTION_DETAIL", False),
     )
 
 
@@ -509,15 +656,16 @@ def task2_save(idx: int):
         return jsonify({"ok": False, "error": "Not logged in"}), 401
 
     data = request.get_json(force=True)
-    # data = {
-    #   "relevance_judgments": [{"attribute": ..., "was_relevant": bool, "annotator_says_relevant": bool}, ...],
-    #   "note": str
-    # }
+    # Look up user_id and prompt_index from the record so they're stored alongside annotations
+    meta = fetch_checklist_record(idx) or {}
     record = {
         "task": "2",
         "index": idx,
+        "user_id": meta.get("user_id", ""),
+        "prompt_index": meta.get("prompt_index", -1),
         "relevance_judgments": data.get("relevance_judgments", []),
         "note": data.get("note", ""),
+        "flagged": data.get("flagged", False),
     }
     save_annotation("2", record)
     return jsonify({"ok": True})
@@ -531,7 +679,16 @@ def task2_list():
     meta = get_checklist_meta_list()
     existing = load_existing_annotations("2")
     for m in meta:
-        m["annotated"] = str(m["annotation_index"]) in existing
+        rec = existing.get(str(m["annotation_index"]))
+        if rec and rec.get("flagged"):
+            m["annotated"] = True
+        elif rec:
+            judgments = rec.get("relevance_judgments", [])
+            m["annotated"] = bool(judgments) and all(
+                j.get("rating") not in (None, "none", "") for j in judgments
+            )
+        else:
+            m["annotated"] = False
     return jsonify(meta)
 
 
@@ -555,5 +712,19 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument(
+        "--mode",
+        choices=["annotator", "debugger"],
+        default="annotator",
+        help="annotator: hides model internals. debugger: shows everything.",
+    )
+    parser.add_argument(
+        "--show-option-detail",
+        action="store_true",
+        default=False,
+        help="Show full definitions of rating options inline next to each button.",
+    )
     args = parser.parse_args()
+    app.config["ANNOTATOR_MODE"] = (args.mode == "annotator")
+    app.config["SHOW_OPTION_DETAIL"] = args.show_option_detail
     app.run(host=args.host, port=args.port, debug=args.debug)

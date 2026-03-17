@@ -179,9 +179,10 @@ body {
   border-radius: 5px;
   transition: opacity .3s;
 }
-.save-status.saved { background: #dcfce7; color: #166534; }
-.save-status.saving { background: #fef9c3; color: #854d0e; }
-.save-status.error  { background: #fee2e2; color: #991b1b; }
+.save-status.saved   { background: #dcfce7; color: #166534; }
+.save-status.saving  { background: #fef9c3; color: #854d0e; }
+.save-status.error   { background: #fee2e2; color: #991b1b; }
+.save-status.warning { background: #fef3c7; color: #92400e; }
 
 /* ── Attribute cards ── */
 .attr-item {
@@ -343,6 +344,16 @@ textarea.note-area {
   gap: 16px;
 }
 @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ── Mobile base ── */
+@media (max-width: 768px) {
+  .topbar { padding: 6px 12px; gap: 8px; }
+  .topbar .app-title { font-size: 13px; }
+  .topbar a { font-size: 12px; }
+  .container { padding: 10px; }
+  .modal-overlay { padding-top: 20px; }
+  .modal-box { max-height: 90vh; }
+}
 
 /* ── Section label ── */
 .section-label {
