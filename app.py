@@ -61,6 +61,9 @@ EXTRACTED_ATTRS      = EXTRACT_DIR / "attrs.jsonl"
 EXTRACTED_CHECKLIST  = EXTRACT_DIR / "checklist_sample.jsonl"
 EXTRACTED_CONVS      = EXTRACT_DIR / "convs.jsonl"
 
+# ─── Task 1 settings ──────────────────────────────────────────────────────────
+TASK1_MAX_USERS = 100  # Only show the first N users for Task 1
+
 # ─── Flask setup ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = "annotation-tool-secret-2024"
@@ -122,6 +125,35 @@ def _load_extracted() -> None:
 
 _load_extracted()
 
+# ─── Attribute evidence cache ──────────────────────────────────────────────────
+# Loaded from data/attr_evidence_cache.jsonl, produced by generate_attr_evidence.py
+# Maps line_index -> list of evidence strings (one per attribute).
+ATTR_EVIDENCE_FILE = BASE_DIR / "data" / "attr_evidence_cache.jsonl"
+_attr_evidence: Dict[int, List[str]] = {}
+
+
+def _load_attr_evidence() -> None:
+    global _attr_evidence
+    if not ATTR_EVIDENCE_FILE.exists():
+        return
+    with open(ATTR_EVIDENCE_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                idx = rec.get("line_index")
+                ev = rec.get("evidence", [])
+                if idx is not None:
+                    _attr_evidence[idx] = ev
+            except Exception:
+                continue
+    print(f"Loaded attr evidence for {len(_attr_evidence)} users.", flush=True)
+
+
+_load_attr_evidence()
+
 
 # ─── File handles (open once, seek on demand) — used only when NOT using extracted ──
 _attrs_fh:    Optional[Any] = None
@@ -158,11 +190,12 @@ def index_ready(db_path: Path) -> bool:
 
 def attrs_count() -> int:
     if _using_extracted:
-        return len(_attrs_list)
+        return min(len(_attrs_list), TASK1_MAX_USERS)
     if not index_ready(ATTRS_INDEX_DB):
         return 0
     with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=10) as conn:
-        return conn.execute("SELECT COUNT(*) FROM attrs_index").fetchone()[0]
+        n = conn.execute("SELECT COUNT(*) FROM attrs_index").fetchone()[0]
+    return min(n, TASK1_MAX_USERS)
 
 
 def _checklist_has_sample(conn) -> bool:
@@ -486,6 +519,15 @@ def task1_view(idx: int):
 
     # Fetch conversations
     conv_records = fetch_user_conversations(user_id)
+    # Flatten all conversations into a single indexed list for evidence lookup
+    all_convs: List[List[Dict]] = []
+    for cr in conv_records:
+        convs = cr.get("conversation") or []
+        if isinstance(convs, list) and convs and isinstance(convs[0], dict):
+            convs = [convs]  # single flat conversation — wrap it
+        for c in convs:
+            all_convs.append(c)
+
     # Build chat HTML per conversation record
     conv_htmls = []
     for cr in conv_records:
@@ -518,6 +560,27 @@ def task1_view(idx: int):
     else:
         is_annotated = False
 
+    # Resolve evidence pointers (conv_idx, turn_idxs) -> list of turn text snippets
+    cached_evidence = _attr_evidence.get(idx, [])
+    attr_evidence: List[List[Dict]] = []
+    for i in range(len(merged_attrs)):
+        ptr = cached_evidence[i] if i < len(cached_evidence) else {}
+        c_idx = ptr.get("conv_idx")
+        t_idxs = ptr.get("turn_idxs") or []
+        turns_out = []
+        if c_idx is not None and 0 <= c_idx < len(all_convs):
+            conv = all_convs[c_idx]
+            for t_idx in t_idxs:
+                if 0 <= t_idx < len(conv):
+                    turn = conv[t_idx]
+                    turns_out.append({
+                        "role": (turn.get("role") or "").upper(),
+                        "text": (turn.get("content") or "").strip()[:600],
+                        "conv_idx": c_idx,
+                        "turn_idx": t_idx,
+                    })
+        attr_evidence.append(turns_out)
+
     return render_template(
         "task1.html",
         idx=idx,
@@ -528,6 +591,7 @@ def task1_view(idx: int):
         annotator=annotator_name(),
         existing=existing,
         is_annotated=is_annotated,
+        attr_evidence=attr_evidence,
         annotator_mode=app.config.get("ANNOTATOR_MODE", True),
         show_option_detail=app.config.get("SHOW_OPTION_DETAIL", False),
     )

@@ -53,6 +53,25 @@
 }
 .conv-flat-body { padding: 6px 0; }
 
+/* ── Attribute reason ────────────────────────────────────────── */
+.attr-reason {
+  font-size: 11px; color: #4b5563; background: #f3f4f6; border-left: 3px solid #9ca3af;
+  padding: 4px 8px; margin: 4px 0 6px 0; border-radius: 0 4px 4px 0; line-height: 1.5;
+}
+
+/* ── Attribute evidence ──────────────────────────────────────── */
+.attr-evidence {
+  font-size: 11px; color: #1e40af; background: #eff6ff; border-left: 3px solid #3b82f6;
+  padding: 4px 8px; margin: 4px 0 6px 0; border-radius: 0 4px 4px 0; line-height: 1.5;
+}
+.evidence-turn {
+  margin-top: 4px; padding: 3px 6px; background: #dbeafe; border-radius: 3px; color: #1e3a8a;
+}
+.evidence-loc {
+  font-weight: 600; font-size: 10px; color: #2563eb; margin-right: 5px;
+  background: #bfdbfe; border-radius: 3px; padding: 1px 4px;
+}
+
 /* ── Incomplete warning ──────────────────────────────────────── */
 .warn-badge { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
 
@@ -158,10 +177,23 @@
 
           <div class="attr-text">{{ attr.attribute }}</div>
 
+          {% if attr.reason %}
+          <div class="attr-reason"><em>Why inferred:</em> {{ attr.reason[:400] }}{% if attr.reason|length > 400 %}…{% endif %}</div>
+          {% endif %}
+
+          {% if attr_evidence[loop.index0] %}
+          <div class="attr-evidence">
+            <em>Evidence from conversation:</em>
+            {% for turn in attr_evidence[loop.index0] %}
+            <div class="evidence-turn">
+              <span class="evidence-loc">Conv {{ turn.conv_idx + 1 }}, Turn {{ turn.turn_idx + 1 }} [{{ turn.role }}]</span>
+              {{ turn.text[:300] }}{% if turn.text|length > 300 %}…{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
           {% if not annotator_mode %}
-            {% if attr.reason %}
-            <div class="attr-reason"><em>Reason:</em> {{ attr.reason[:400] }}{% if attr.reason|length > 400 %}…{% endif %}</div>
-            {% endif %}
             {% if attr.original_attributes %}
             <details style="margin-bottom:6px;">
               <summary style="font-size:11px; color:#888; cursor:pointer;">Original variants ({{ attr.original_attributes|length }})</summary>
