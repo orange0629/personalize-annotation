@@ -29,21 +29,38 @@
 
 /* ── Sticky nav ──────────────────────────────────────────────── */
 .sticky-nav { position: sticky; top: 44px; z-index: 50; background: #f8fafc; padding-bottom: 4px; }
+.btn-nav { background: #2563eb; color: #fff; }
+.btn-nav:hover { background: #1d4ed8; }
 
 /* ── Two-column layout ───────────────────────────────────────── */
 .two-col-sticky { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
+/* Left-column wrapper fills the full grid cell so wheel events are captured everywhere in the left area */
+.left-col-wrap { min-height: 100%; }
 
-/* ── Sticky left column ──────────────────────────────────────── */
+/* ── Column floating titles ──────────────────────────────────── */
+.col-title {
+  position: sticky; top: 144px; z-index: 20;
+  background: #f0f2f5; padding: 6px 0 8px 0; margin-bottom: 4px;
+  font-size: 13px; font-weight: 600; color: #111827;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 2px 4px rgba(0,0,0,.06);
+}
+
+/* ── Sticky left column (outer wrapper, no scroll) ───────────── */
 .sticky-col {
-  position: sticky; top: 144px; max-height: calc(100vh - 160px);
+  position: sticky; top: 144px;
+}
+/* ── Inner scroll area ───────────────────────────────────────── */
+.conv-scroll {
+  max-height: calc(100vh - 204px);
   overflow-y: scroll; padding-bottom: 32px;
   scrollbar-width: thin; scrollbar-color: #94a3b8 #cbd5e1; border-radius: 8px;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable; overscroll-behavior: contain;
 }
-.sticky-col::-webkit-scrollbar       { width: 8px; display: block; }
-.sticky-col::-webkit-scrollbar-track { background: #cbd5e1; border-radius: 4px; }
-.sticky-col::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; min-height: 40px; }
+.conv-scroll::-webkit-scrollbar       { width: 8px; display: block; }
+.conv-scroll::-webkit-scrollbar-track { background: #cbd5e1; border-radius: 4px; }
+.conv-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; min-height: 40px; }
 
 /* Flat conversation card */
 .conv-flat { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
@@ -53,23 +70,59 @@
 }
 .conv-flat-body { padding: 6px 0; }
 
+/* ── Instruction banner ──────────────────────────────────────── */
+.instr-banner {
+  font-size: 13px; font-weight: 500; color: #1e3a5f; margin-top: 8px; padding: 10px 14px;
+  border: 2px solid #3b82f6; border-radius: 7px; background: #dbeafe; line-height: 1.6;
+}
+.instr-toggle {
+  font-size: 11px; color: #2563eb; cursor: pointer; margin-top: 5px; display: inline-block;
+  text-decoration: underline; background: none; border: none; padding: 0;
+}
+.instr-full {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid #93c5fd;
+  font-size: 12px; color: #374151; font-weight: 400; line-height: 1.7;
+}
+.instr-full li { margin-left: 16px; margin-bottom: 3px; }
+
+/* ── Annotated attr (annotator mode) ────────────────────────── */
+.attr-item.judged { border-color: #6ee7b7; }
+
 /* ── Attribute reason ────────────────────────────────────────── */
 .attr-reason {
-  font-size: 11px; color: #4b5563; background: #f3f4f6; border-left: 3px solid #9ca3af;
+  font-size: 11px; color: #374151; background: #f9fafb; border-left: 3px solid #9ca3af;
   padding: 4px 8px; margin: 4px 0 6px 0; border-radius: 0 4px 4px 0; line-height: 1.5;
+}
+.reason-header {
+  font-size: 11px; font-weight: 600; color: #374151; margin-bottom: 2px;
+}
+.reason-hint {
+  font-weight: 400; font-size: 10px; color: #6b7280; margin-left: 4px;
 }
 
 /* ── Attribute evidence ──────────────────────────────────────── */
 .attr-evidence {
-  font-size: 11px; color: #1e40af; background: #eff6ff; border-left: 3px solid #3b82f6;
+  font-size: 11px; color: #374151; background: #f9fafb; border-left: 3px solid #9ca3af;
   padding: 4px 8px; margin: 4px 0 6px 0; border-radius: 0 4px 4px 0; line-height: 1.5;
 }
-.evidence-turn {
-  margin-top: 4px; padding: 3px 6px; background: #dbeafe; border-radius: 3px; color: #1e3a8a;
+.evidence-header {
+  font-size: 11px; font-weight: 600; color: #374151; margin-bottom: 4px;
 }
-.evidence-loc {
-  font-weight: 600; font-size: 10px; color: #2563eb; margin-right: 5px;
-  background: #bfdbfe; border-radius: 3px; padding: 1px 4px;
+.evidence-hint {
+  font-weight: 400; font-size: 10px; color: #6b7280; margin-left: 4px;
+}
+.evidence-turn {
+  margin-top: 4px; padding: 3px 6px; background: #e5e7eb; border-radius: 3px; color: #111827;
+  cursor: pointer; transition: background .12s;
+}
+.evidence-turn:hover, .evidence-turn.active { background: #d1d5db; }
+.evidence-turn.active { outline: 1px solid #6b7280; }
+
+/* ── Turn highlight (left panel) ─────────────────────────────── */
+details.turn-highlight > summary > .msg,
+div.msg-details.turn-highlight > .msg {
+  outline: 2px solid #2563eb; outline-offset: 1px;
+  background: #eff6ff !important; border-radius: 6px;
 }
 
 /* ── Incomplete warning ──────────────────────────────────────── */
@@ -88,14 +141,10 @@
   /* Hide instruction in nav on mobile — too much vertical space */
   .sticky-nav .instr-line { display: none; }
 
-  /* Sticky col becomes normal flow */
-  .sticky-col {
-    position: relative !important;
-    top: auto !important;
-    max-height: none !important;
-    overflow-y: visible !important;
-    padding-bottom: 0 !important;
-  }
+  /* Sticky col becomes normal flow on mobile */
+  .sticky-col { position: relative !important; top: auto !important; }
+  .conv-scroll { max-height: none !important; overflow-y: visible !important; padding-bottom: 0 !important; }
+  .col-title   { position: relative !important; top: auto !important; box-shadow: none; }
 
   /* Shrink conversation bubbles a bit */
   .msg-text { font-size: 11px; }
@@ -111,18 +160,18 @@
     <div class="card" style="padding:10px 16px; margin-bottom:0;">
       <div class="nav-bar">
         {% if idx > 0 %}
-          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx-1) }}')">← Prev</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx-1) }}')">← Save &amp; Prev</button>
         {% else %}
-          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Save &amp; Prev</span>
         {% endif %}
         <span class="nav-info">User <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong></span>
         <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
         {% if is_annotated %}<span class="annotated-badge">✓ Annotated</span>{% endif %}
         <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
         {% if idx < total - 1 %}
-          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx+1) }}')">Next →</button>
+          <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('{{ url_for('task1_view', idx=idx+1) }}')">Save &amp; Next →</button>
         {% else %}
-          <span class="btn btn-secondary btn-sm" style="opacity:.4;">Next →</span>
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">Save &amp; Next →</span>
         {% endif %}
         <span style="flex:1;"></span>
         <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
@@ -131,32 +180,60 @@
       </div>
 
       <!-- Instruction -->
-      <div class="instr-line">
-        <strong>Instruction:</strong> Read the conversation history on the left. For each inferred attribute on the right, judge whether it accurately reflects the user. Also note any missing attributes.
+      <div class="instr-banner">
+        📋 <strong>Task:</strong> Read the conversation history on the left. For each inferred attribute on the right, judge whether it accurately reflects the user.
+        <details>
+          <summary class="instr-toggle">View full instructions ▸</summary>
+          <div class="instr-full">
+            <ul>
+              <li><strong>✓ Makes sense</strong> — the attribute is plausible given what the user wrote.</li>
+              <li><strong>✗ Doesn't make sense</strong> — the attribute seems wrong or unsupported by the conversations.</li>
+              <li><strong>? Unsure</strong> — you cannot tell from the conversations.</li>
+              <li>Use the <em>Why inferred</em> reason and <em>Evidence</em> snippets under each attribute to guide your judgment.</li>
+              <li>Hover an evidence snippet to highlight the relevant turn on the left; click to scroll to it.</li>
+              <li>List any attributes you think are missing in the <em>Missing Attributes</em> box at the bottom.</li>
+              <li>Click <strong>🚩 Flag Uncomfortable</strong> if the content makes you uncomfortable — it will auto-save and move on.</li>
+            </ul>
+          </div>
+        </details>
       </div>
     </div>
   </div>
 
+  {% if task_done %}
+  <div style="position:fixed; inset:0; z-index:999; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;" id="doneOverlay">
+    <div style="background:#fff; border-radius:14px; padding:40px 44px; max-width:460px; width:90vw; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.25);">
+      <div style="font-size:52px; margin-bottom:12px;">🎉</div>
+      <h2 style="font-size:22px; font-weight:800; color:#166534; margin-bottom:10px;">You're all done!</h2>
+      <p style="font-size:14px; color:#555; line-height:1.6; margin-bottom:24px;">
+        All items are annotated. <strong>Go to the completion page to get your Prolific code and submit your work.</strong>
+      </p>
+      <a href="/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
+        Go to Completion Page →
+      </a>
+      <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none; border:none; font-size:12px; color:#aaa; cursor:pointer; text-decoration:underline;">
+        Dismiss and keep reviewing
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- User info -->
   <div class="card" style="padding:10px 16px; margin-top:8px;">
-    <div class="card-title">User</div>
-    <span class="user-id-chip">{{ user_id }}</span>
-    <span class="badge badge-gray" style="margin-left:8px;">{{ conv_htmls|length }} conversation(s)</span>
+    <span style="font-weight:600; font-size:13px;">User {{ idx + 1 }}</span>
     <span class="badge badge-blue" style="margin-left:4px;">{{ merged_attrs|length }} attributes</span>
   </div>
 
   <div class="two-col-sticky" style="margin-top:12px;">
 
     <!-- Left: Conversations (sticky) -->
+    <div class="left-col-wrap">
     <div class="sticky-col">
-      <div class="card-title" style="padding:0 0 8px 0;">Conversation History</div>
+      <div class="col-title">Conversation History</div>
+      <div class="conv-scroll">
       {% if conv_htmls %}
         {% for cv in conv_htmls %}
         <div class="conv-flat">
-          <div class="conv-flat-title">
-            Conversation {{ loop.index }}
-            {% if cv.model %}<span class="badge badge-gray">{{ cv.model }}</span>{% endif %}
-          </div>
           <div class="conv-flat-body">{{ cv.html | safe }}</div>
         </div>
         {% endfor %}
@@ -165,11 +242,13 @@
           <p style="font-size:13px; color:#888;">No conversation data found for this user.</p>
         </div>
       {% endif %}
+      </div><!-- end .conv-scroll -->
     </div>
+    </div><!-- end .left-col-wrap -->
 
     <!-- Right: Attributes + Annotation -->
     <div>
-      <div class="card-title" style="padding:0 0 6px 0;">Inferred Attributes</div>
+      <div class="col-title">Inferred Attributes</div>
 
       <div id="attrList">
         {% for attr in merged_attrs %}
@@ -178,16 +257,22 @@
           <div class="attr-text">{{ attr.attribute }}</div>
 
           {% if attr.reason %}
-          <div class="attr-reason"><em>Why inferred:</em> {{ attr.reason[:400] }}{% if attr.reason|length > 400 %}…{% endif %}</div>
+          <div class="attr-reason">
+            <div class="reason-header">🔍 Why inferred <span class="reason-hint">model's reasoning for this attribute</span></div>
+            {{ attr.reason[:400] }}{% if attr.reason|length > 400 %}…{% endif %}
+          </div>
           {% endif %}
 
           {% if attr_evidence[loop.index0] %}
           <div class="attr-evidence">
-            <em>Evidence from conversation:</em>
+            <div class="evidence-header">💬 Evidence from conversation <span class="evidence-hint">hover to highlight · click to jump</span></div>
             {% for turn in attr_evidence[loop.index0] %}
-            <div class="evidence-turn">
+            <div class="evidence-turn"
+                 onmouseenter="hoverTurn({{ turn.conv_idx }}, {{ turn.turn_idx }})"
+                 onmouseleave="unhoverTurn()"
+                 onclick="clickTurn({{ turn.conv_idx }}, {{ turn.turn_idx }}, this)">
               <span class="evidence-loc">Conv {{ turn.conv_idx + 1 }}, Turn {{ turn.turn_idx + 1 }} [{{ turn.role }}]</span>
-              {{ turn.text[:300] }}{% if turn.text|length > 300 %}…{% endif %}
+              {{ turn.text[:150] }}{% if turn.text|length > 150 %}…{% endif %}
             </div>
             {% endfor %}
           </div>
@@ -211,8 +296,6 @@
             <button class="judgment-btn" data-val="unsure" onclick="setJudgment({{ loop.index0 }}, 'unsure', this)">? Unsure</button>
           </div>
 
-          <textarea class="attr-note-input" rows="1" placeholder="Optional note…" id="note-{{ loop.index0 }}"
-          >{% if existing and existing.attr_judgments and loop.index0 < existing.attr_judgments|length %}{{ existing.attr_judgments[loop.index0].note or '' }}{% endif %}</textarea>
         </div>
         {% endfor %}
       </div>
@@ -255,11 +338,13 @@
     </div>
   </div>
 </div>
+<div style="height: 120px;"></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const totalAttrs = {{ merged_attrs|length }};
+const totalAttrs    = {{ merged_attrs|length }};
+const ANNOTATOR_MODE = {{ 'true' if annotator_mode else 'false' }};
 const judgments  = {};
 let   isFlagged  = {{ 'true' if existing and existing.flagged else 'false' }};
 
@@ -283,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Judgment ───────────────────────────────────────────────────
 function setJudgment(idx, val, btn) {
   document.querySelectorAll(`#attr-${idx} .judgment-btn`).forEach(b => b.className = 'judgment-btn');
-  const note = document.getElementById(`note-${idx}`).value;
+  const note = '';
   if (judgments[idx] && judgments[idx].judgment === val) {
     delete judgments[idx];
     updateAttrItemClass(idx, null);
@@ -296,8 +381,12 @@ function setJudgment(idx, val, btn) {
 }
 
 function updateAttrItemClass(idx, val) {
-  document.getElementById(`attr-${idx}`).className =
-    'attr-item' + (val === 'ok' ? ' ok' : val === 'bad' ? ' flagged' : '');
+  const el = document.getElementById(`attr-${idx}`);
+  if (ANNOTATOR_MODE) {
+    el.className = 'attr-item' + (val ? ' judged' : '');
+  } else {
+    el.className = 'attr-item' + (val === 'ok' ? ' ok' : val === 'bad' ? ' flagged' : '');
+  }
 }
 
 // ── Incomplete check ───────────────────────────────────────────
@@ -321,9 +410,22 @@ function updateIncompleteWarn() {
 }
 
 // ── Flag ───────────────────────────────────────────────────────
-function toggleFlag() {
+async function toggleFlag() {
+  const wasOff = !isFlagged;
   isFlagged = !isFlagged;
   document.getElementById('flagBtn').classList.toggle('active', isFlagged);
+  if (isFlagged && wasOff) {
+    // Auto-save and go to next when flagging
+    try {
+      const resp = await fetch(`/task1/{{ idx }}/save`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collectPayload()),
+      });
+      const d = await resp.json();
+      if (d.all_done) { location.href = '/complete'; return; }
+    } catch(e) {}
+    {% if idx < total - 1 %}location.href = '/task1/{{ idx + 1 }}';{% endif %}
+  }
 }
 
 // ── Payload ────────────────────────────────────────────────────
@@ -354,6 +456,7 @@ function saveAnnotation() {
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
+      if (d.all_done) { location.href = '/complete'; return; }
       const n = countIncomplete();
       const msg = n > 0 ? `✓ Saved (${n} attr${n>1?'s':''} unrated)` : '✓ Saved';
       const type = n > 0 ? 'warning' : 'saved';
@@ -374,10 +477,12 @@ async function saveAndNavigate(url) {
   const st1 = document.getElementById('saveStatus');
   if (st1) { st1.style.opacity = '1'; showSaveStatus(st1, 'saving', 'Saving…'); }
   try {
-    await fetch(`/task1/{{ idx }}/save`, {
+    const resp = await fetch(`/task1/{{ idx }}/save`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(collectPayload()),
     });
+    const d = await resp.json();
+    if (d.all_done) { location.href = '/complete'; return; }
   } catch(e) {}
   location.href = url;
 }
@@ -410,6 +515,75 @@ function renderJumpList(items) {
     </div>`
   ).join('');
 }
+
+// ── Evidence hover / click ─────────────────────────────────────
+let _pinnedChip   = null;  // currently clicked (pinned) chip
+let _hoverTimeout = null;
+
+function _findTurn(convIdx, turnIdx) {
+  return document.querySelector(`[data-conv-idx="${convIdx}"][data-turn-idx="${turnIdx}"]`);
+}
+
+function _clearHighlights() {
+  document.querySelectorAll('.turn-highlight').forEach(d => d.classList.remove('turn-highlight'));
+}
+
+function _scrollToTurn(el) {
+  const col = document.querySelector('.conv-scroll');
+  if (!col || !el) return;
+  const colRect = col.getBoundingClientRect();
+  const elRect  = el.getBoundingClientRect();
+  col.scrollTop += elRect.top - colRect.top - 60;
+}
+
+function hoverTurn(convIdx, turnIdx) {
+  clearTimeout(_hoverTimeout);
+  _clearHighlights();
+  const el = _findTurn(convIdx, turnIdx);
+  if (el) el.classList.add('turn-highlight');
+}
+
+function unhoverTurn() {
+  _hoverTimeout = setTimeout(() => {
+    _clearHighlights();
+    if (_pinnedChip) {
+      const el = _findTurn(parseInt(_pinnedChip.dataset.conv), parseInt(_pinnedChip.dataset.turn));
+      if (el) el.classList.add('turn-highlight');
+    }
+  }, 120);
+}
+
+function clickTurn(convIdx, turnIdx, chip) {
+  if (_pinnedChip === chip) {
+    chip.classList.remove('active');
+    _pinnedChip = null;
+    _clearHighlights();
+    return;
+  }
+  if (_pinnedChip) _pinnedChip.classList.remove('active');
+  _clearHighlights();
+  _pinnedChip = chip;
+  chip.classList.add('active');
+  const el = _findTurn(convIdx, turnIdx);
+  if (!el) return;
+  el.classList.add('turn-highlight');
+  _scrollToTurn(el);
+}
+
+// ── Route wheel events over left column (and the page margin to its left) ──
+// Check if cursor is left of the sticky column's right edge, so the empty
+// background margin on the left side of the page also scrolls the column.
+(function() {
+  const convScroll = document.querySelector('.conv-scroll');
+  const leftCol    = document.querySelector('.sticky-col');
+  if (!convScroll || !leftCol) return;
+  document.addEventListener('wheel', (e) => {
+    if (e.clientX <= leftCol.getBoundingClientRect().right) {
+      e.preventDefault();
+      convScroll.scrollTop += e.deltaY;
+    }
+  }, { passive: false, capture: true });
+})();
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;

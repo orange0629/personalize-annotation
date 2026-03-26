@@ -7,24 +7,24 @@
     <div style="text-align:center; margin-bottom:28px;">
       <div style="font-size:40px;">📝</div>
       <h1 style="font-size:20px; font-weight:700; margin-top:10px; color:#1e3a5f;">Annotation Tool</h1>
-      <p style="font-size:13px; color:#666; margin-top:6px;">Please enter your name to begin.</p>
+      <p style="font-size:13px; color:#666; margin-top:6px;">Please enter your Prolific ID to begin.</p>
     </div>
 
     <form method="post">
       <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#374151;">
-        Your Name
+        Your Prolific ID
       </label>
       <input
         type="text"
         name="name"
         value="{{ current_name or '' }}"
-        placeholder="e.g. Alice"
+        placeholder="e.g. 6123abc4de5f6789a0b1c2d3"
         autofocus
         required
         style="width:100%; padding:10px 12px; border:1.5px solid #d1d5db; border-radius:7px; font-size:14px; margin-bottom:18px;"
       >
       <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:10px;">
-        Start Annotating →
+        Start →
       </button>
     </form>
 

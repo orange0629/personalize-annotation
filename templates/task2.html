@@ -91,11 +91,24 @@
   border-radius: 8px 8px 0 0;
 }
 
-/* ── Instruction line ────────────────────────────────────────── */
-.instr-line {
-  font-size: 12px; color: #1e3a5f; margin-top: 8px; padding: 7px 10px;
-  border: 1px solid #bfdbfe; border-radius: 6px; background: #eff6ff; line-height: 1.5;
+/* ── Instruction banner ──────────────────────────────────────── */
+.instr-banner {
+  font-size: 13px; font-weight: 500; color: #1e3a5f; margin-top: 8px; padding: 10px 14px;
+  border: 2px solid #3b82f6; border-radius: 7px; background: #dbeafe; line-height: 1.6;
 }
+.instr-toggle {
+  font-size: 11px; color: #2563eb; cursor: pointer; margin-top: 5px; display: inline-block;
+  text-decoration: underline; background: none; border: none; padding: 0;
+}
+.instr-full {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid #93c5fd;
+  font-size: 12px; color: #374151; font-weight: 400; line-height: 1.7;
+}
+.instr-full li { margin-left: 16px; margin-bottom: 3px; }
+.btn-nav { background: #2563eb; color: #fff; }
+.btn-nav:hover { background: #1d4ed8; }
+/* ── Rated attr (annotator mode) ─────────────────────────────── */
+.cl-item.r-rated { border-color: #93c5fd; background: #f0f9ff; }
 
 /* ── Flag button (in nav bar) ────────────────────────────────── */
 .flag-btn {
@@ -123,6 +136,7 @@
   align-items: start;
 }
 @media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
+.left-col-wrap { min-height: 100%; }
 
 /* ── Sticky column ──────────────────────────────────────────────────── */
 .sticky-col {
@@ -134,6 +148,7 @@
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 #e2e8f0;
   border-radius: 8px;
+  overscroll-behavior: contain;
 }
 .sticky-col::-webkit-scrollbar       { width: 7px; }
 .sticky-col::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
@@ -184,9 +199,9 @@
     <div class="card" style="padding:10px 16px; margin-bottom:0;">
       <div class="nav-bar">
         {% if idx > 0 %}
-          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx-1) }}')">← Prev</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx-1) }}')">← Save &amp; Prev</button>
         {% else %}
-          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Save &amp; Prev</span>
         {% endif %}
 
         <span class="nav-info">Pair <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong></span>
@@ -197,9 +212,9 @@
         <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
 
         {% if idx < total - 1 %}
-          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx+1) }}')">Next →</button>
+          <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('{{ url_for('task2_view', idx=idx+1) }}')">Save &amp; Next →</button>
         {% else %}
-          <span class="btn btn-secondary btn-sm" style="opacity:.4;">Next →</span>
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">Save &amp; Next →</span>
         {% endif %}
 
         <span style="flex:1;"></span>
@@ -209,16 +224,46 @@
       </div>
 
       <!-- Instruction -->
-      <div class="instr-line">
-        <strong>Instruction:</strong> Read the prompt on the left. Rate each profile attribute by how much it should influence the response, assuming you are a user with those profile attributes.
+      <div class="instr-banner">
+        📋 <strong>Task:</strong> Read the prompt on the left. Rate each profile attribute by how much it should influence the response, assuming you are a user with those profile attributes.
+        <details>
+          <summary class="instr-toggle">View full instructions ▸</summary>
+          <div class="instr-full">
+            <ul>
+              <li><strong>Explicitly Impact</strong> — the response should directly adapt to and explicitly acknowledge this attribute.</li>
+              <li><strong>Implicitly Impact</strong> — the response should be shaped by this attribute, but without mentioning it directly.</li>
+              <li><strong>Optional</strong> — could theoretically apply, but including or excluding it makes little difference.</li>
+              <li><strong>Irrelevant</strong> — completely unrelated to this prompt; should have no influence on the response.</li>
+              <li><strong>Avoid</strong> — the response should actively avoid using this information; including it would be inappropriate.</li>
+              <li>Click <strong>🚩 Flag Uncomfortable</strong> if the content makes you uncomfortable — it will auto-save and move on.</li>
+            </ul>
+          </div>
+        </details>
       </div>
     </div>
   </div>
 
+  {% if task_done %}
+  <div style="position:fixed; inset:0; z-index:999; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;" id="doneOverlay">
+    <div style="background:#fff; border-radius:14px; padding:40px 44px; max-width:460px; width:90vw; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.25);">
+      <div style="font-size:52px; margin-bottom:12px;">🎉</div>
+      <h2 style="font-size:22px; font-weight:800; color:#166534; margin-bottom:10px;">You're all done!</h2>
+      <p style="font-size:14px; color:#555; line-height:1.6; margin-bottom:24px;">
+        All items are annotated. <strong>Go to the completion page to get your Prolific code and submit your work.</strong>
+      </p>
+      <a href="/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
+        Go to Completion Page →
+      </a>
+      <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none; border:none; font-size:12px; color:#aaa; cursor:pointer; text-decoration:underline;">
+        Dismiss and keep reviewing
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Meta -->
   <div class="card" style="padding:10px 16px; margin-top:8px;">
     <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-      <span class="user-id-chip">{{ user_id }}</span>
       <span class="badge badge-gray">Prompt #{{ prompt_index }}</span>
       <span class="badge badge-blue">{{ profile_attrs|length }} profile attrs</span>
       {% if not annotator_mode %}
@@ -230,6 +275,7 @@
   <div class="two-col-sticky" style="margin-top:12px;">
 
     <!-- Left: Prompt + Legend (sticky) -->
+    <div class="left-col-wrap">
     <div class="sticky-col">
       <div class="card">
         <div class="card-title">Prompt</div>
@@ -268,6 +314,7 @@
       </div>
       {% endif %}
     </div>
+    </div><!-- end .left-col-wrap -->
 
     <!-- Right: All profile attributes -->
     <div>
@@ -399,6 +446,7 @@
     </div>
   </div>
 </div>
+<div style="height: 120px;"></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -448,10 +496,21 @@ function updateIncompleteWarn() {
 }
 
 // ── Flag ───────────────────────────────────────────────────────
-function toggleFlag() {
+async function toggleFlag() {
+  const wasOff = !isFlagged;
   isFlagged = !isFlagged;
   document.getElementById('flagBtn').classList.toggle('active', isFlagged);
-  document.getElementById('flagReason').style.display = isFlagged ? 'inline-block' : 'none';
+  if (isFlagged && wasOff) {
+    try {
+      const resp = await fetch(`/task2/{{ idx }}/save`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collectPayload()),
+      });
+      const d = await resp.json();
+      if (d.all_done) { location.href = '/complete'; return; }
+    } catch(e) {}
+    {% if idx < total - 1 %}location.href = '/task2/{{ idx + 1 }}';{% endif %}
+  }
 }
 
 function setRating(idx, val, btn) {
@@ -467,7 +526,8 @@ function setRating(idx, val, btn) {
 
 function applyRatingUI(idx, val) {
   const card = document.getElementById(`cl-${idx}`);
-  card.className = card.className.replace(/\br-\S+/g, '').trim() + ` r-${val}`;
+  const colorClass = ANNOTATOR_MODE ? (val !== 'none' ? 'r-rated' : 'r-none') : `r-${val}`;
+  card.className = card.className.replace(/\br-\S+/g, '').trim() + ` ${colorClass}`;
 
   document.getElementById(`rg-${idx}`).querySelectorAll('.rbtn').forEach(b => {
     b.className = b.className.replace(/\bactive-\S+/g, '').trim();
@@ -516,6 +576,7 @@ function saveAnnotation() {
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
+      if (d.all_done) { location.href = '/complete'; return; }
       const n = countIncomplete();
       const msg = n > 0 ? `✓ Saved (${n} attr${n>1?'s':''} unrated)` : '✓ Saved';
       const type = n > 0 ? 'warning' : 'saved';
@@ -536,10 +597,12 @@ async function saveAndNavigate(url) {
   const st1 = document.getElementById('saveStatus');
   if (st1) { st1.style.opacity = '1'; showSaveStatus(st1, 'saving', 'Saving…'); }
   try {
-    await fetch(`/task2/{{ idx }}/save`, {
+    const resp = await fetch(`/task2/{{ idx }}/save`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(collectPayload()),
     });
+    const d = await resp.json();
+    if (d.all_done) { location.href = '/complete'; return; }
   } catch(e) {}
   location.href = url;
 }
@@ -579,6 +642,7 @@ function renderJumpList(items) {
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;

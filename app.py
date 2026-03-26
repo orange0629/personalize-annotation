@@ -61,8 +61,9 @@ EXTRACTED_ATTRS      = EXTRACT_DIR / "attrs.jsonl"
 EXTRACTED_CHECKLIST  = EXTRACT_DIR / "checklist_sample.jsonl"
 EXTRACTED_CONVS      = EXTRACT_DIR / "convs.jsonl"
 
-# ─── Task 1 settings ──────────────────────────────────────────────────────────
+# ─── Task settings (overridable via CLI) ──────────────────────────────────────
 TASK1_MAX_USERS = 100  # Only show the first N users for Task 1
+TASK2_MAX_ITEMS = 0    # 0 = no limit; set via --task2-max-items
 
 # ─── Flask setup ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -206,13 +207,16 @@ def _checklist_has_sample(conn) -> bool:
 
 def checklist_count() -> int:
     if _using_extracted:
-        return len(_checklist_list)
-    if not index_ready(CHECKLIST_INDEX_DB):
+        n = len(_checklist_list)
+    elif not index_ready(CHECKLIST_INDEX_DB):
         return 0
-    with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=10) as conn:
-        if _checklist_has_sample(conn):
-            return conn.execute("SELECT COUNT(*) FROM checklist_sample").fetchone()[0]
-        return conn.execute("SELECT COUNT(*) FROM checklist_index").fetchone()[0]
+    else:
+        with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=10) as conn:
+            if _checklist_has_sample(conn):
+                n = conn.execute("SELECT COUNT(*) FROM checklist_sample").fetchone()[0]
+            else:
+                n = conn.execute("SELECT COUNT(*) FROM checklist_index").fetchone()[0]
+    return min(n, TASK2_MAX_ITEMS) if TASK2_MAX_ITEMS > 0 else n
 
 
 def fetch_attrs_record(line_index: int) -> Optional[Dict]:
@@ -383,6 +387,27 @@ def save_annotation(task: str, record: Dict) -> None:
     tmp_path.replace(path)  # atomic rename
 
 
+def count_annotated(task: str, total: int) -> int:
+    """Count how many of the [0, total) items this annotator has fully completed."""
+    existing = load_existing_annotations(task)
+    count = 0
+    for i in range(total):
+        rec = existing.get(str(i))
+        if not rec:
+            continue
+        if rec.get("flagged"):
+            count += 1
+        elif task == "1":
+            judgments = rec.get("attr_judgments", [])
+            if judgments and all(j.get("judgment") for j in judgments):
+                count += 1
+        elif task == "2":
+            judgments = rec.get("relevance_judgments", [])
+            if judgments and all(j.get("rating") not in (None, "none", "") for j in judgments):
+                count += 1
+    return count
+
+
 # ─── Conversation HTML builder (adapted from visualize_score_assistant_like_usage.py) ──
 
 def build_chat_html(conversations: Any, max_convs: int = 50, max_turns_per_conv: int = 30,
@@ -407,7 +432,7 @@ def build_chat_html(conversations: Any, max_convs: int = 50, max_turns_per_conv:
             html_parts.append(f'<div class="conv-label">Conversation {c_idx + 1}</div>')
 
         turns_in_conv = 0
-        for turn in conv_turns:
+        for t_idx, turn in enumerate(conv_turns):
             if turns_in_conv >= max_turns_per_conv:
                 html_parts.append('<div class="chat-more-hint">… more turns in this conversation not shown.</div>')
                 break
@@ -421,27 +446,33 @@ def build_chat_html(conversations: Any, max_convs: int = 50, max_turns_per_conv:
             role_class = "msg-user" if role == "USER" else (
                 "msg-assistant" if role in {"ASSISTANT", "SYSTEM", "TOOL"} else "msg-other"
             )
-            hint = (
-                ' <span style="font-style:italic;font-size:10px;color:#2563eb;'
-                'background:#dbeafe;border-radius:3px;padding:1px 4px;margin-left:4px;">'
-                '↕ click to expand</span>'
-            )
-            short_text = html.escape(text[:short_chars]) + (hint if len(text) > short_chars else "")
-            long_text  = html.escape(text[:long_chars])  + (html.escape("…") if len(text) > long_chars else "")
-
             safe_role = html.escape(role)
+            data_attrs = f'data-conv-idx="{c_idx}" data-turn-idx="{t_idx}"'
 
-            html_parts.append(
-                f'<details class="msg-details">'
-                f'<summary><div class="msg {role_class}">'
-                f'<div class="msg-role">{safe_role}</div>'
-                f'<div class="msg-text">{short_text}</div>'
-                f'</div></summary>'
-                f'<div class="msg-long"><div class="msg {role_class} msg-expanded">'
-                f'<div class="msg-role">{safe_role} (full)</div>'
-                f'<div class="msg-text">{long_text}</div>'
-                f'</div></div></details>'
-            )
+            if len(text) <= short_chars:
+                # Short enough — plain non-expandable div
+                html_parts.append(
+                    f'<div class="msg-details" {data_attrs}>'
+                    f'<div class="msg {role_class}">'
+                    f'<div class="msg-role">{safe_role}</div>'
+                    f'<div class="msg-text">{html.escape(text)}</div>'
+                    f'</div></div>'
+                )
+            else:
+                hint = (
+                    ' <span class="expand-hint">↕ click to expand</span>'
+                )
+                short_text = html.escape(text[:short_chars]) + hint
+                long_text  = html.escape(text[:long_chars]) + (html.escape("…") if len(text) > long_chars else "")
+                html_parts.append(
+                    f'<details class="msg-details" {data_attrs}>'
+                    f'<summary><div class="msg {role_class}">'
+                    f'<div class="msg-role">{safe_role}</div>'
+                    f'<div class="msg-text msg-short">{short_text}</div>'
+                    f'<div class="msg-text msg-full">{long_text}</div>'
+                    f'</div></summary>'
+                    f'</details>'
+                )
             turns_in_conv += 1
             turns_shown += 1
 
@@ -456,6 +487,11 @@ def build_chat_html(conversations: Any, max_convs: int = 50, max_turns_per_conv:
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    # Auto-login via Prolific PID passed in the study URL query string
+    prolific_pid = request.args.get("PROLIFIC_PID", "").strip()
+    if prolific_pid:
+        session["annotator_name"] = prolific_pid
+        return redirect(url_for("task_select"))
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         if name:
@@ -581,6 +617,7 @@ def task1_view(idx: int):
                     })
         attr_evidence.append(turns_out)
 
+    task_done = count_annotated("1", total) >= total
     return render_template(
         "task1.html",
         idx=idx,
@@ -594,6 +631,7 @@ def task1_view(idx: int):
         attr_evidence=attr_evidence,
         annotator_mode=app.config.get("ANNOTATOR_MODE", True),
         show_option_detail=app.config.get("SHOW_OPTION_DETAIL", False),
+        task_done=task_done,
     )
 
 
@@ -617,7 +655,9 @@ def task1_save(idx: int):
         "flagged": data.get("flagged", False),
     }
     save_annotation("1", record)
-    return jsonify({"ok": True})
+    total = attrs_count()
+    all_done = total > 0 and count_annotated("1", total) >= total
+    return jsonify({"ok": True, "all_done": all_done})
 
 
 @app.route("/task1/list")
@@ -696,6 +736,7 @@ def task2_view(idx: int):
     else:
         is_annotated = False
 
+    task_done = count_annotated("2", total) >= total
     return render_template(
         "task2.html",
         idx=idx,
@@ -711,6 +752,7 @@ def task2_view(idx: int):
         is_annotated=is_annotated,
         annotator_mode=app.config.get("ANNOTATOR_MODE", True),
         show_option_detail=app.config.get("SHOW_OPTION_DETAIL", False),
+        task_done=task_done,
     )
 
 
@@ -732,7 +774,9 @@ def task2_save(idx: int):
         "flagged": data.get("flagged", False),
     }
     save_annotation("2", record)
-    return jsonify({"ok": True})
+    total = checklist_count()
+    all_done = total > 0 and count_annotated("2", total) >= total
+    return jsonify({"ok": True, "all_done": all_done})
 
 
 @app.route("/task2/list")
@@ -754,6 +798,22 @@ def task2_list():
         else:
             m["annotated"] = False
     return jsonify(meta)
+
+
+# ─── Completion route ─────────────────────────────────────────────────────────
+
+@app.route("/complete")
+def complete():
+    if not annotator_name():
+        return redirect(url_for("index"))
+    prolific_url = app.config.get("PROLIFIC_COMPLETION_URL", "")
+    prolific_code = app.config.get("PROLIFIC_CODE", "")
+    return render_template(
+        "complete.html",
+        prolific_url=prolific_url,
+        prolific_code=prolific_code,
+        annotator=annotator_name(),
+    )
 
 
 # ─── Error template route ─────────────────────────────────────────────────────
@@ -788,7 +848,36 @@ if __name__ == "__main__":
         default=False,
         help="Show full definitions of rating options inline next to each button.",
     )
+    parser.add_argument(
+        "--task1-max-users",
+        type=int,
+        default=5,
+        help="Max number of users shown in Task 1 (default: 100).",
+    )
+    parser.add_argument(
+        "--task2-max-items",
+        type=int,
+        default=0,
+        help="Max number of pairs shown in Task 2 (0 = no limit).",
+    )
+    parser.add_argument(
+        "--prolific-completion-url",
+        default="https://app.prolific.com/submissions/complete?cc=C8LTQ4U9",
+        help="Full Prolific completion URL shown on the done page.",
+    )
+    parser.add_argument(
+        "--prolific-code",
+        default="C8LTQ4U9",
+        help="Prolific completion code displayed on the done page.",
+    )
     args = parser.parse_args()
+
+    # Apply workload limits (override module-level defaults)
+    TASK1_MAX_USERS = args.task1_max_users
+    TASK2_MAX_ITEMS = args.task2_max_items
+
     app.config["ANNOTATOR_MODE"] = (args.mode == "annotator")
     app.config["SHOW_OPTION_DETAIL"] = args.show_option_detail
+    app.config["PROLIFIC_COMPLETION_URL"] = args.prolific_completion_url
+    app.config["PROLIFIC_CODE"] = args.prolific_code
     app.run(host=args.host, port=args.port, debug=args.debug)
