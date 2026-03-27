@@ -11,6 +11,7 @@
     </div>
 
     <form method="post">
+      <input type="hidden" name="next" value="{{ next_task or '' }}">
       <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:#374151;">
         Your Prolific ID
       </label>
@@ -31,7 +32,13 @@
     {% if current_name %}
     <p style="margin-top:14px; font-size:12px; color:#888; text-align:center;">
       Currently signed in as <strong>{{ current_name }}</strong>.
+      {% if next_task == "task1" %}
+      <a href="{{ url_for('task1_view', idx=0) }}">Continue →</a>
+      {% elif next_task == "task2" %}
+      <a href="{{ url_for('task2_view', idx=0) }}">Continue →</a>
+      {% else %}
       <a href="{{ url_for('task_select') }}">Continue →</a>
+      {% endif %}
     </p>
     {% endif %}
   </div>

@@ -370,21 +370,27 @@ def load_existing_annotations(task: str) -> Dict[str, Any]:
     return result
 
 
+import fcntl
+
 def save_annotation(task: str, record: Dict) -> None:
-    """Upsert annotation: one record per index, rewrite file atomically."""
     record["annotator"] = annotator_name()
     record["timestamp"] = datetime.utcnow().isoformat()
 
-    # Load all existing records, update the entry for this index, rewrite.
-    all_records = load_existing_annotations(task)
-    all_records[str(record["index"])] = record
-
     path = annot_file(task)
-    tmp_path = path.with_suffix(".jsonl.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        for rec in all_records.values():
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    tmp_path.replace(path)  # atomic rename
+    lock_path = path.with_suffix(".lock")
+    
+    with open(lock_path, "w") as lock_fh:
+        fcntl.flock(lock_fh, fcntl.LOCK_EX)
+        try:
+            all_records = load_existing_annotations(task)
+            all_records[str(record["index"])] = record
+            tmp_path = path.with_suffix(".jsonl.tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                for rec in all_records.values():
+                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            tmp_path.replace(path)
+        finally:
+            fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
 def count_annotated(task: str, total: int) -> int:
@@ -485,19 +491,30 @@ def build_chat_html(conversations: Any, max_convs: int = 50, max_turns_per_conv:
 
 # ─── Routes: auth ─────────────────────────────────────────────────────────────
 
+def _next_redirect(next_task: str):
+    """Redirect to the task indicated by next_task, or the select page."""
+    if next_task == "task1":
+        return redirect(url_for("task1_view", idx=0))
+    if next_task == "task2":
+        return redirect(url_for("task2_view", idx=0))
+    return redirect(url_for("task_select"))
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     # Auto-login via Prolific PID passed in the study URL query string
     prolific_pid = request.args.get("PROLIFIC_PID", "").strip()
+    next_task = request.args.get("next", "").strip()
     if prolific_pid:
         session["annotator_name"] = prolific_pid
-        return redirect(url_for("task_select"))
+        return _next_redirect(next_task)
     if request.method == "POST":
         name = request.form.get("name", "").strip()
+        next_task = request.form.get("next", "").strip()
         if name:
             session["annotator_name"] = name
-            return redirect(url_for("task_select"))
-    return render_template("login.html", current_name=annotator_name())
+            return _next_redirect(next_task)
+    return render_template("login.html", current_name=annotator_name(), next_task=next_task)
 
 
 @app.route("/logout")
@@ -529,7 +546,7 @@ def task_select():
 @app.route("/task1")
 def task1_redirect():
     if not annotator_name():
-        return redirect(url_for("index"))
+        return redirect(url_for("index", next="task1"))
     return redirect(url_for("task1_view", idx=0))
 
 
@@ -684,7 +701,7 @@ def task1_list():
 @app.route("/task2")
 def task2_redirect():
     if not annotator_name():
-        return redirect(url_for("index"))
+        return redirect(url_for("index", next="task2"))
     return redirect(url_for("task2_view", idx=0))
 
 

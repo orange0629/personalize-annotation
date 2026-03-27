@@ -181,18 +181,17 @@ div.msg-details.turn-highlight > .msg {
 
       <!-- Instruction -->
       <div class="instr-banner">
-        📋 <strong>Task:</strong> Read the conversation history on the left. For each inferred attribute on the right, judge whether it accurately reflects the user.
+        📋 <strong>Task:</strong> Read the conversation history between <strong>USER</strong> and <strong>AI</strong> on the left. For each inferred attribute about <strong>USER</strong> on the right, judge whether it accurately reflects the <strong>USER</strong> based on the conversation.
         <details>
           <summary class="instr-toggle">View full instructions ▸</summary>
           <div class="instr-full">
             <ul>
-              <li><strong>✓ Makes sense</strong> — the attribute is plausible given what the user wrote.</li>
+              <li><strong>✓ Makes sense</strong> — the attribute is plausible given the conversation history.</li>
               <li><strong>✗ Doesn't make sense</strong> — the attribute seems wrong or unsupported by the conversations.</li>
-              <li><strong>? Unsure</strong> — you cannot tell from the conversations.</li>
+              <li><strong>? Unsure</strong> — you are unsure based on the conversations.</li>
               <li>Use the <em>Why inferred</em> reason and <em>Evidence</em> snippets under each attribute to guide your judgment.</li>
-              <li>Hover an evidence snippet to highlight the relevant turn on the left; click to scroll to it.</li>
-              <li>List any attributes you think are missing in the <em>Missing Attributes</em> box at the bottom.</li>
-              <li>Click <strong>🚩 Flag Uncomfortable</strong> if the content makes you uncomfortable — it will auto-save and move on.</li>
+              <li><strong>OPTIONAL:</strong> List any attributes you think are missing in the <em>Missing Attributes</em> box at the bottom.</li>
+              <li><strong>OPTIONAL:</strong> Click <strong>🚩 Flag Uncomfortable</strong> to skip uncomfortable instances.</li>
             </ul>
           </div>
         </details>
