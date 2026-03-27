@@ -189,9 +189,10 @@ div.msg-details.turn-highlight > .msg {
               <li><strong>✓ Makes sense</strong> — the attribute is plausible given the conversation history.</li>
               <li><strong>✗ Doesn't make sense</strong> — the attribute seems wrong or unsupported by the conversations.</li>
               <li><strong>? Unsure</strong> — you are unsure based on the conversations.</li>
+            </ul>
+            <ul>
               <li>Use the <em>Why inferred</em> reason and <em>Evidence</em> snippets under each attribute to guide your judgment.</li>
-              <li><strong>OPTIONAL:</strong> List any attributes you think are missing in the <em>Missing Attributes</em> box at the bottom.</li>
-              <li><strong>OPTIONAL:</strong> Click <strong>🚩 Flag Uncomfortable</strong> to skip uncomfortable instances.</li>
+              <li>Click <strong>🚩 Flag Uncomfortable</strong> to skip uncomfortable instances.</li>
             </ul>
           </div>
         </details>
@@ -299,10 +300,12 @@ div.msg-details.turn-highlight > .msg {
         {% endfor %}
       </div>
 
-      <hr class="section-divider">
-
-      <div class="card-title" style="padding:0 0 6px 0;">Missing Attributes</div>
-      <textarea class="note-area" id="missingAttrs" placeholder="List any attributes you think are missing, one per line…">{{ existing.missing_attrs if existing else '' }}</textarea>
+      <!-- Missing Attributes section hidden for now; keep for future use -->
+      <div style="display:none;">
+        <hr class="section-divider">
+        <div class="card-title" style="padding:0 0 6px 0;">Missing Attributes</div>
+        <textarea class="note-area" id="missingAttrs" placeholder="List any attributes you think are missing, one per line…">{{ existing.missing_attrs if existing else '' }}</textarea>
+      </div>
 
       <hr class="section-divider">
 
