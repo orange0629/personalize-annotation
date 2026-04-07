@@ -1,0 +1,679 @@
+{% extends "base.html" %}
+{% block title %}Task 3 — Pair {{ idx+1 }} — Annotation Tool{% endblock %}
+
+{% block extra_head %}
+<style>
+/* ── Attribute row ─────────────────────────────────────────────────── */
+.cl-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  padding: 10px 13px;
+  margin-bottom: 7px;
+  background: #fafafa;
+  transition: border-color .15s, background .15s;
+}
+.cl-item.r-yes  { background: #dcfce7; border-color: #4ade80; }
+.cl-item.r-no   { background: #fafafa; border-color: #e5e7eb; opacity: .85; }
+.cl-item.r-none { background: #fafafa; border-color: #e5e7eb; }
+
+.cl-attr-text {
+  font-weight: 600; font-size: 13px; margin-bottom: 5px;
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 5px; line-height: 1.4;
+}
+.cl-attr-label { flex: 1; min-width: 0; }
+
+/* ── YES / NO buttons ──────────────────────────────────────────────── */
+.yn-group { display: flex; gap: 6px; margin-top: 6px; }
+.yn-btn {
+  padding: 4px 18px; border-radius: 5px; border: 1.5px solid #d1d5db;
+  background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
+  color: #374151; transition: all .12s; white-space: nowrap; min-height: 32px;
+}
+.yn-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+.yn-btn.active-yes { background: #16a34a; border-color: #15803d; color: #fff; }
+.yn-btn.active-no  { background: #e5e7eb; border-color: #9ca3af; color: #374151; }
+
+/* ── Model chips ───────────────────────────────────────────────────── */
+.model-votes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.mv-chip {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
+  border-radius: 10px; font-size: 11px; border: 1px solid transparent;
+  white-space: nowrap; cursor: default;
+}
+.mv-chip.mv-yes { background: #dcfce7; border-color: #4ade80; color: #166534; }
+.mv-chip.mv-no  { background: #f3f4f6; border-color: #d1d5db; color: #6b7280; }
+.mv-label { font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; color: #9ca3af; }
+
+/* ── Admin overlay ──────────────────────────────────────────────── */
+.admin-overlay {
+  margin-top: 7px; padding: 6px 8px;
+  background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px;
+  font-size: 11px;
+}
+.admin-overlay-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 4px; }
+.admin-overlay-row:last-child { margin-bottom: 0; }
+.admin-overlay-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; color: #9ca3af; margin-right: 2px;
+}
+.admin-chip {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
+  border-radius: 10px; font-size: 11px; border: 1px solid transparent;
+  white-space: nowrap; cursor: default;
+}
+.admin-chip-name { font-weight: 600; }
+.admin-chip-val  { font-weight: 400; font-style: italic; }
+.admin-chip.r-yes  { background: #dcfce7; border-color: #4ade80; color: #166534; }
+.admin-chip.r-no   { background: #f3f4f6; border-color: #d1d5db; color: #6b7280; }
+.admin-chip.r-none { background: #f3f4f6; border-color: #e5e7eb; color: #9ca3af; }
+.admin-disagree { font-size: 10px; font-weight: 700; color: #b45309;
+  background: #fef3c7; border: 1px solid #fcd34d; border-radius: 4px;
+  padding: 1px 6px; white-space: nowrap; }
+
+/* ── Agreement bar ──────────────────────────────────────────── */
+.agree-bar-wrap { margin-top: 5px; }
+.agree-bar-bg { background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden; display: flex; }
+.agree-bar-yes { background: #4ade80; height: 100%; }
+.agree-bar-no  { background: #d1d5db; height: 100%; }
+.agree-label { font-size: 10px; color: #6b7280; margin-top: 2px; }
+
+/* ── Other layout ─────────────────────────────────────────── */
+.section-header {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: #888; margin: 14px 0 7px; padding-bottom: 4px;
+  border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px;
+}
+.attrs-panel-title {
+  font-size: 13px; font-weight: 700; color: #1e293b;
+  padding: 10px 14px 8px; border-bottom: 1px solid #e5e7eb;
+  display: flex; align-items: center; gap: 8px;
+  background: #f8fafc; border-radius: 8px 8px 0 0;
+}
+.instr-banner {
+  font-size: 13px; font-weight: 500; color: #1e3a5f; margin-top: 8px; padding: 10px 14px;
+  border: 2px solid #3b82f6; border-radius: 7px; background: #dbeafe; line-height: 1.6;
+}
+.instr-toggle { font-size: 11px; color: #2563eb; cursor: pointer; margin-top: 5px; display: inline-block; text-decoration: underline; background: none; border: none; padding: 0; }
+.instr-full { margin-top: 8px; padding-top: 8px; border-top: 1px solid #93c5fd; font-size: 12px; color: #374151; font-weight: 400; line-height: 1.7; }
+.instr-full li { margin-left: 16px; margin-bottom: 3px; }
+.btn-nav { background: #2563eb; color: #fff; }
+.btn-nav:hover { background: #1d4ed8; }
+.flag-btn { padding: 4px 10px; border-radius: 5px; border: 1.5px solid #fca5a5; background: #fff; cursor: pointer; font-size: 11px; color: #b91c1c; font-weight: 500; transition: all .15s; white-space: nowrap; }
+.flag-btn:hover, .flag-btn.active { background: #fee2e2; border-color: #dc2626; }
+.warn-badge { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
+.sticky-nav { position: sticky; top: 44px; z-index: 50; background: #f8fafc; padding-bottom: 4px; }
+.two-col-sticky { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
+.left-col-wrap { min-height: 100%; }
+.sticky-col {
+  position: sticky; top: 144px; max-height: calc(100vh - 160px);
+  overflow-y: scroll; padding-bottom: 32px;
+  scrollbar-width: thin; scrollbar-color: #94a3b8 #e2e8f0;
+  border-radius: 8px; overscroll-behavior: contain;
+}
+.sticky-col::-webkit-scrollbar       { width: 7px; }
+.sticky-col::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
+.sticky-col::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+@media (max-width: 768px) {
+  .sticky-nav { top: 38px; }
+  .sticky-nav .card { padding: 7px 10px; }
+  .sticky-nav .nav-bar { gap: 5px; }
+  .sticky-nav .btn-sm { padding: 3px 7px; font-size: 11px; }
+  .sticky-col { position: relative !important; top: auto !important; max-height: none !important; overflow-y: visible !important; padding-bottom: 0 !important; }
+  .yn-btn { min-height: 34px; padding: 4px 14px; }
+}
+
+/* ── Admin summary panel ──────────────────────────────────── */
+.summary-card {
+  border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px;
+  margin-bottom: 14px; background: #f8fafc;
+}
+.summary-card h4 { font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.summary-stat { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+.summary-stat .stat-val { font-size: 20px; font-weight: 800; color: #1e293b; }
+.summary-stat .stat-label { color: #6b7280; margin-top: 1px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="container">
+
+  <!-- Sticky navigation bar -->
+  <div class="sticky-nav">
+    <div class="card" style="padding:10px 16px; margin-bottom:0;">
+      <div class="nav-bar">
+        {% if idx > 0 %}
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task3_view', idx=idx-1) }}')">← Save &amp; Prev</button>
+        {% else %}
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Save &amp; Prev</span>
+        {% endif %}
+
+        <span class="nav-info">Pair <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong></span>
+        <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
+
+        {% if is_annotated %}<span class="annotated-badge">✓ Annotated</span>{% endif %}
+
+        <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
+
+        {% if idx < total - 1 %}
+          <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('{{ url_for('task3_view', idx=idx+1) }}')">Save &amp; Next →</button>
+        {% else %}
+          <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('/complete')">Save &amp; Finish ✓</button>
+        {% endif %}
+
+        <span style="flex:1;"></span>
+        <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
+        <button class="flag-btn {% if existing and existing.flagged %}active{% endif %}" id="flagBtn" onclick="toggleFlag()">🚩 Flag</button>
+        <span id="saveStatus" class="save-status" style="opacity:0;"> </span>
+      </div>
+
+      <!-- Instruction -->
+      <div class="instr-banner">
+        📋 <strong>Task 3:</strong> For each profile attribute, decide whether it should be taken into account when personalizing the response to this prompt.
+        <details>
+          <summary class="instr-toggle">View full instructions ▸</summary>
+          <div class="instr-full">
+            <ul>
+              <li><strong>YES</strong> — the attribute would influence the response in any way (explicitly mentioned, or implicitly shaping tone/vocabulary/examples/depth).</li>
+              <li><strong>NO</strong> — the attribute has absolutely no bearing on the response; the reply would be identical without it.</li>
+              <li>Even a subtle or invisible influence counts as <strong>YES</strong>.</li>
+              <li>Click <strong>🚩 Flag</strong> if the content makes you uncomfortable — it will auto-save and move on.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  {% if task_done %}
+  <div style="position:fixed; inset:0; z-index:999; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;" id="doneOverlay">
+    <div style="background:#fff; border-radius:14px; padding:40px 44px; max-width:460px; width:90vw; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.25);">
+      <div style="font-size:52px; margin-bottom:12px;">🎉</div>
+      <h2 style="font-size:22px; font-weight:800; color:#166534; margin-bottom:10px;">You're all done!</h2>
+      <p style="font-size:14px; color:#555; line-height:1.6; margin-bottom:24px;">
+        All items are annotated. <strong>Go to the completion page to get your Prolific code and submit your work.</strong>
+      </p>
+      <a href="/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
+        Go to Completion Page →
+      </a>
+      <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none; border:none; font-size:12px; color:#aaa; cursor:pointer; text-decoration:underline;">
+        Dismiss and keep reviewing
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Meta -->
+  <div class="card" style="padding:10px 16px; margin-top:8px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <span class="badge badge-gray">Prompt #{{ prompt_index }}</span>
+      <span class="badge badge-blue">{{ profile_attrs|length }} attributes</span>
+      {% if is_admin %}
+        <span class="badge" style="background:#fce7f3; color:#9d174d;">Admin view</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="two-col-sticky" style="margin-top:12px;">
+
+    <!-- Left: Prompt (sticky) -->
+    <div class="left-col-wrap">
+    <div class="sticky-col">
+
+      {% if is_admin %}
+      <!-- Admin summary panel -->
+      <div class="summary-card">
+
+        <!-- This-prompt stats -->
+        <h4 style="margin-bottom:6px;">This prompt</h4>
+        {% set total_attrs = profile_attrs|length %}
+        {% set n_disagree = admin_agreement | selectattr('disagreement') | list | length %}
+        {% set n_agree = total_attrs - n_disagree %}
+        <div class="summary-grid" style="margin-bottom:10px;">
+          <div class="summary-stat">
+            <div class="stat-val">{{ total_attrs }}</div>
+            <div class="stat-label">Attributes</div>
+          </div>
+          <div class="summary-stat">
+            <div class="stat-val" style="color:#166534;">{{ n_agree }}</div>
+            <div class="stat-label">Full agreement</div>
+          </div>
+          <div class="summary-stat">
+            <div class="stat-val" style="color:#b45309;">{{ n_disagree }}</div>
+            <div class="stat-label">Disagreements</div>
+          </div>
+        </div>
+
+        <!-- Global agreement across all prompts -->
+        {% if global_agreement %}
+        {% set ga = global_agreement %}
+        <h4 style="margin-top:10px; margin-bottom:6px; border-top:1px solid #e5e7eb; padding-top:10px;">
+          Global agreement — all {{ ga.n_total_keys }} (attr, sample) pairs
+        </h4>
+
+        <!-- YES rates -->
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#9ca3af; margin-bottom:4px;">YES rate per rater</div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:10px;">
+          <thead>
+            <tr style="color:#6b7280; font-weight:600;">
+              <th style="text-align:left; padding:2px 4px;">Rater</th>
+              <th style="text-align:right; padding:2px 4px;">YES%</th>
+              <th style="text-align:right; padding:2px 4px;">N</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in ga.yes_rates %}
+            <tr style="border-top:1px solid #f3f4f6;">
+              <td style="padding:2px 4px; color:{{ '#166534' if r.is_model else '#1e3a5f' }};">
+                {{ '[M]' if r.is_model else '[H]' }} {{ r.rater | replace('[M] ','') | replace('[H] ','') | truncate(28, true, '…') }}
+              </td>
+              <td style="text-align:right; padding:2px 4px; font-weight:600;">
+                {% if r.yes_rate is not none %}{{ "%.1f"|format(r.yes_rate*100) }}%{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right; padding:2px 4px; color:#9ca3af;">{{ r.n }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Pairwise agreement -->
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#9ca3af; margin-bottom:4px;">Pairwise agreement</div>
+        {% set pw_sections = [
+          ('Model × Model', ga.pairwise.model_model),
+          ('Human × Human', ga.pairwise.human_human),
+          ('Model × Human', ga.pairwise.model_human),
+        ] %}
+        {% for section_title, rows in pw_sections %}
+        {% if rows %}
+        <div style="font-size:10px; font-weight:700; color:#6b7280; margin:5px 0 2px;">{{ section_title }}</div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:6px;">
+          <thead>
+            <tr style="color:#9ca3af; font-size:10px;">
+              <th style="text-align:left; padding:1px 4px;">A</th>
+              <th style="text-align:left; padding:1px 4px;">B</th>
+              <th style="text-align:right; padding:1px 4px;">Agree</th>
+              <th style="text-align:right; padding:1px 4px;">κ</th>
+              <th style="text-align:right; padding:1px 4px;">N</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            {% set agree_pct = (r.agree * 100) if r.agree is not none else none %}
+            {% set kappa = r.kappa %}
+            <tr style="border-top:1px solid #f3f4f6;">
+              <td style="padding:2px 4px;">{{ r.rater_a | replace('[M] ','') | replace('[H] ','') | truncate(20,true,'…') }}</td>
+              <td style="padding:2px 4px;">{{ r.rater_b | replace('[M] ','') | replace('[H] ','') | truncate(20,true,'…') }}</td>
+              <td style="text-align:right; padding:2px 4px; font-weight:600;
+                color:{{ '#166534' if agree_pct and agree_pct >= 70 else ('#b45309' if agree_pct and agree_pct < 60 else '#374151') }};">
+                {% if agree_pct is not none %}{{ "%.1f"|format(agree_pct) }}%{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right; padding:2px 4px; color:#6b7280;">
+                {% if kappa is not none and kappa == kappa %}{{"%.3f"|format(kappa)}}{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right; padding:2px 4px; color:#9ca3af;">{{ r.n }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+        {% endfor %}
+
+        <!-- Summary + alpha -->
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#9ca3af; margin:8px 0 4px;">Summary</div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:8px;">
+          <thead>
+            <tr style="color:#9ca3af; font-size:10px;">
+              <th style="text-align:left; padding:1px 4px;">Group</th>
+              <th style="text-align:right; padding:1px 4px;">Avg agree</th>
+              <th style="text-align:right; padding:1px 4px;">Avg κ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in ga.summary %}
+            <tr style="border-top:1px solid #f3f4f6;">
+              <td style="padding:2px 4px;">{{ s.group }}</td>
+              <td style="text-align:right; padding:2px 4px; font-weight:600;">
+                {% if s.avg_agree is not none %}{{ "%.1f"|format(s.avg_agree*100) }}%{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right; padding:2px 4px; color:#6b7280;">
+                {% if s.avg_kappa is not none and s.avg_kappa == s.avg_kappa %}{{"%.3f"|format(s.avg_kappa)}}{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {% set a = ga.alphas %}
+        <div style="font-size:11px; color:#374151;">
+          <strong>Krippendorff's α</strong> (nominal):
+          Models {% if a.models is not none %}{{ "%.4f"|format(a.models) }}{% else %}n/a{% endif %} &nbsp;·&nbsp;
+          Humans {% if a.humans is not none %}{{ "%.4f"|format(a.humans) }}{% else %}n/a{% endif %} &nbsp;·&nbsp;
+          All {% if a.all is not none %}{{ "%.4f"|format(a.all) }}{% else %}n/a{% endif %}
+        </div>
+        {% endif %}
+
+        <div style="margin-top:8px; font-size:10px; color:#9ca3af;">
+          Agreement = fraction of YES/NO votes matching the majority (across all models + annotators per item).
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card">
+        <div class="card-title">Prompt</div>
+        <div class="prompt-box">{{ prompt_text }}</div>
+      </div>
+
+      <div class="card" style="padding:12px 16px;">
+        <div class="card-title">Scale</div>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:12px;">
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="yn-btn active-yes" style="cursor:default; flex-shrink:0;">YES</span>
+            <span>The attribute would change the response in any way — explicit mention or implicit adjustment to tone, examples, depth, etc.</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span class="yn-btn active-no" style="cursor:default; flex-shrink:0;">NO</span>
+            <span>The attribute has absolutely no effect — the response would be word-for-word identical without it.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    </div><!-- end .left-col-wrap -->
+
+    <!-- Right: All profile attributes -->
+    <div>
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; overflow: hidden;">
+        <div class="attrs-panel-title">
+          Profile Attributes
+          <span class="badge badge-blue" style="font-size:11px;">{{ profile_attrs|length }}</span>
+          <span style="font-size:11px; color:#888; font-weight:400; margin-left:4px;">— relevant to this prompt?</span>
+        </div>
+        <div style="padding: 10px 10px 4px;">
+          <div id="attrItems">
+            {% for attr in profile_attrs %}
+            {% set attr_text = attr.attribute %}
+            {% set model_votes = attr_model_relevance.get(attr_text, {}) %}
+            {% set n_model_yes = model_votes.values() | selectattr('__eq__', 'equalto', true) | list | length %}
+            {% set n_model_total = model_votes | length %}
+
+            <div class="cl-item r-none" id="cl-{{ loop.index0 }}">
+              <div class="cl-attr-text">
+                <span class="cl-attr-label">{{ attr_text }}</span>
+              </div>
+
+              <!-- YES / NO buttons -->
+              <div class="yn-group" id="yng-{{ loop.index0 }}">
+                <button class="yn-btn" data-val="true"
+                  onclick="setRelevant({{ loop.index0 }}, true, this)">YES</button>
+                <button class="yn-btn" data-val="false"
+                  onclick="setRelevant({{ loop.index0 }}, false, this)">NO</button>
+              </div>
+
+              <!-- Model votes (always shown) -->
+              {% if model_votes %}
+              <div style="margin-top:6px;">
+                <span class="mv-label">Model votes:</span>
+                <div class="model-votes">
+                  {% for model_name, rel in model_votes.items() %}
+                  <span class="mv-chip {{ 'mv-yes' if rel else 'mv-no' }}" title="{{ model_name }}">
+                    <span>{{ 'YES' if rel else 'NO' }}</span>
+                    <span style="opacity:.7; font-size:10px;">{{ model_name.split('/')[-1][:22] }}</span>
+                  </span>
+                  {% endfor %}
+                </div>
+              </div>
+              {% endif %}
+
+              <!-- Admin overlay: annotator votes + agreement bar -->
+              {% if is_admin and admin_annots and admin_annots[loop.index0] %}
+              {% set ann_list = admin_annots[loop.index0] %}
+              {% set ag = admin_agreement[loop.index0] if admin_agreement else none %}
+              <div class="admin-overlay">
+                <div class="admin-overlay-row">
+                  <span class="admin-overlay-label">Annotators</span>
+                  {% if ag and ag.disagreement %}
+                    <span class="admin-disagree">⚠ Disagreement</span>
+                  {% endif %}
+                  {% for a in ann_list %}
+                    {% set rv = a.relevant %}
+                    <span class="admin-chip {{ 'r-yes' if rv == true else ('r-no' if rv == false else 'r-none') }}"
+                          title="{{ a.note or '' }}">
+                      <span class="admin-chip-name">{{ a.annotator }}</span>
+                      <span class="admin-chip-val">{{ 'YES' if rv == true else ('NO' if rv == false else '—') }}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+                {% if ag and ag.agreement_pct is not none %}
+                {% set pct = ag.agreement_pct %}
+                {% set n_yes = ag.n_human_yes + ag.n_model_yes %}
+                {% set n_no  = ag.n_human_no  + ag.n_model_no %}
+                {% set n_tot = n_yes + n_no %}
+                <div class="agree-bar-wrap">
+                  <div class="agree-bar-bg">
+                    <div class="agree-bar-yes" style="width:{{ (100 * n_yes / n_tot)|int if n_tot else 0 }}%;"></div>
+                    <div class="agree-bar-no"  style="width:{{ (100 * n_no  / n_tot)|int if n_tot else 0 }}%;"></div>
+                  </div>
+                  <div class="agree-label">
+                    YES {{ n_yes }}/{{ n_tot }} ({{ (100*n_yes/n_tot)|int if n_tot else 0 }}%) &nbsp;·&nbsp;
+                    {{ ag.n_model_yes }} model-yes / {{ ag.n_model_no }} model-no &nbsp;·&nbsp;
+                    {{ ag.n_human_yes }} human-yes / {{ ag.n_human_no }} human-no &nbsp;·&nbsp;
+                    {{ pct }}% majority agreement
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+              {% endif %}
+
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:4px; padding-top:12px; border-top:1px solid #e5e7eb;">
+        <div class="card-title" style="padding:0 0 6px 0;">Note</div>
+        <textarea class="note-area" id="annotNote"
+          placeholder="Any overall comments about this pair's relevance annotations..."
+        >{{ existing.note if existing else '' }}</textarea>
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-success" onclick="saveAnnotation()">💾 Save Annotation</button>
+          {% if idx < total - 1 %}
+          <button class="btn btn-primary" onclick="saveAndNavigate('/task3/{{ idx+1 }}')">💾 Save &amp; Next →</button>
+          {% endif %}
+          <span id="saveStatus2" class="save-status" style="opacity:0;"> </span>
+          <span id="incompleteWarn" class="warn-badge" style="display:none;"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- Jump Modal -->
+<div class="modal-overlay" id="jumpModal" onclick="closeJumpModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      Jump to Pair
+      <button onclick="closeJumpModal()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;">✕</button>
+    </div>
+    <div class="modal-search">
+      <input type="text" id="jumpSearch" placeholder="Search by user ID, index, or prompt..." oninput="filterJumpList()">
+    </div>
+    <div class="modal-list" id="jumpList">
+      <div style="padding:20px; text-align:center; color:#888; font-size:13px;">Loading...</div>
+    </div>
+  </div>
+</div>
+<div style="height: 120px;"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const profileAttrs = {{ profile_attrs | tojson }};
+// currentRelevant[i] = true | false | null
+const currentRelevant = profileAttrs.map(() => null);
+let isFlagged = {{ 'true' if existing and existing.flagged else 'false' }};
+
+// ── Restore existing annotation ────────────────────────────────────────
+{% if existing and existing.relevance_judgments %}
+const existingJudgments = {{ existing.relevance_judgments | tojson }};
+const existingByAttr = {};
+existingJudgments.forEach(j => { if (j && j.attribute !== undefined) existingByAttr[j.attribute] = j; });
+document.addEventListener('DOMContentLoaded', () => {
+  profileAttrs.forEach((a, i) => {
+    const j = existingByAttr[a.attribute];
+    if (j && j.relevant !== null && j.relevant !== undefined) {
+      currentRelevant[i] = j.relevant;
+      applyUI(i, j.relevant);
+    }
+  });
+  updateIncompleteWarn();
+});
+{% else %}
+document.addEventListener('DOMContentLoaded', updateIncompleteWarn);
+{% endif %}
+
+function setRelevant(idx, val, btn) {
+  // Toggle off if clicking already-active value
+  if (currentRelevant[idx] === val) {
+    currentRelevant[idx] = null;
+    applyUI(idx, null);
+  } else {
+    currentRelevant[idx] = val;
+    applyUI(idx, val);
+  }
+  updateIncompleteWarn();
+}
+
+function applyUI(idx, val) {
+  const card = document.getElementById(`cl-${idx}`);
+  card.className = card.className.replace(/\br-\S+/g, '').trim();
+  if (val === true)  card.classList.add('r-yes');
+  else if (val === false) card.classList.add('r-no');
+  else card.classList.add('r-none');
+
+  document.getElementById(`yng-${idx}`).querySelectorAll('.yn-btn').forEach(b => {
+    b.className = b.className.replace(/\bactive-\S+/g, '').trim();
+    const bVal = b.dataset.val === 'true';
+    if (val !== null && bVal === val) b.classList.add(bVal ? 'active-yes' : 'active-no');
+  });
+}
+
+function countIncomplete() {
+  return currentRelevant.filter(v => v === null).length;
+}
+function updateIncompleteWarn() {
+  const n = countIncomplete();
+  const el = document.getElementById('incompleteWarn');
+  if (n > 0) { el.textContent = `${n} attribute${n > 1 ? 's' : ''} not rated`; el.style.display = 'inline'; }
+  else { el.style.display = 'none'; }
+}
+
+function toggleFlag() {
+  const wasOff = !isFlagged;
+  isFlagged = !isFlagged;
+  document.getElementById('flagBtn').classList.toggle('active', isFlagged);
+  if (isFlagged && wasOff) {
+    fetch(`/task3/{{ idx }}/save`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectPayload()),
+    }).then(r => r.json()).then(d => {
+      if (d.all_done) { location.href = '/complete'; return; }
+      {% if idx < total - 1 %}location.href = '/task3/{{ idx + 1 }}';{% endif %}
+    }).catch(() => {});
+  }
+}
+
+function collectPayload() {
+  return {
+    relevance_judgments: profileAttrs.map((attr, i) => ({
+      attribute: attr.attribute,
+      relevant:  currentRelevant[i],
+    })),
+    note:    document.getElementById('annotNote').value,
+    flagged: isFlagged,
+  };
+}
+
+function saveAnnotation() {
+  const st1 = document.getElementById('saveStatus');
+  const st2 = document.getElementById('saveStatus2');
+  [st1, st2].forEach(s => { s.style.opacity = '1'; showSaveStatus(s, 'saving', 'Saving…'); });
+  fetch(`/task3/{{ idx }}/save`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(collectPayload()),
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      if (d.all_done) { location.href = '/complete'; return; }
+      const n = countIncomplete();
+      const msg = n > 0 ? `✓ Saved (${n} unrated)` : '✓ Saved';
+      const type = n > 0 ? 'warning' : 'saved';
+      [st1, st2].forEach(s => showSaveStatus(s, type, msg));
+      setTimeout(() => [st1, st2].forEach(s => s.style.opacity = '0'), 3000);
+    } else {
+      [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Error: ' + (d.error || '?')));
+    }
+  })
+  .catch(() => [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Network error')));
+}
+
+async function saveAndNavigate(url) {
+  const n = countIncomplete();
+  if (n > 0) {
+    if (!confirm(`${n} attribute${n > 1 ? 's are' : ' is'} not yet rated. Proceed anyway?`)) return;
+  }
+  const st1 = document.getElementById('saveStatus');
+  if (st1) { st1.style.opacity = '1'; showSaveStatus(st1, 'saving', 'Saving…'); }
+  try {
+    const resp = await fetch(`/task3/{{ idx }}/save`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectPayload()),
+    });
+    const d = await resp.json();
+    if (d.all_done) { location.href = '/complete'; return; }
+  } catch(e) {}
+  location.href = url;
+}
+
+let jumpItems = [];
+function openJumpModal() {
+  document.getElementById('jumpModal').classList.add('open');
+  document.getElementById('jumpSearch').value = '';
+  if (jumpItems.length === 0) {
+    fetch('/task3/list').then(r => r.json()).then(data => { jumpItems = data; renderJumpList(data); });
+  } else { renderJumpList(jumpItems); }
+  setTimeout(() => document.getElementById('jumpSearch').focus(), 50);
+}
+function closeJumpModal(e) {
+  if (!e || e.target === document.getElementById('jumpModal'))
+    document.getElementById('jumpModal').classList.remove('open');
+}
+function filterJumpList() {
+  const q = document.getElementById('jumpSearch').value.toLowerCase();
+  renderJumpList(jumpItems.filter(item =>
+    String(item.annotation_index).includes(q) ||
+    item.user_id.toLowerCase().includes(q) ||
+    (item.prompt_snippet || '').toLowerCase().includes(q)
+  ));
+}
+function renderJumpList(items) {
+  const el = document.getElementById('jumpList');
+  if (!items.length) { el.innerHTML = '<div style="padding:16px; text-align:center; color:#888;">No results.</div>'; return; }
+  el.innerHTML = items.map(item =>
+    `<div class="modal-item ${item.annotated ? 'annotated' : ''}"
+          onclick="saveAndNavigate('/task3/${item.annotation_index}')">
+      <span class="modal-item-idx">#${item.annotation_index + 1}</span>
+      <span class="modal-item-text">${escHtml(item.prompt_snippet || '')}…</span>
+      ${item.annotated ? '<span class="modal-item-done">✓</span>' : ''}
+    </div>`
+  ).join('');
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

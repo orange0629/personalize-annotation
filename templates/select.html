@@ -44,7 +44,7 @@
   </div>
 
   <!-- Task 2 -->
-  <div class="card">
+  <div class="card" style="margin-bottom:16px;">
     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
       <div style="flex:1; min-width:240px;">
         <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
@@ -68,6 +68,43 @@
         {% if t2_ready %}
           <a href="{{ url_for('task2_redirect') }}" class="btn btn-primary" style="justify-content:center;">
             Start Task 2 →
+          </a>
+        {% else %}
+          <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
+            Index required
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Task 3 -->
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
+          Task 3 — Attribute Relevance Classification
+        </h3>
+        <p style="font-size:13px; color:#555; line-height:1.6; margin-bottom:12px;">
+          For each user–prompt pair, decide for every profile attribute whether it
+          should be taken into account when personalizing the AI's response.
+          Answer <strong>YES</strong> if the attribute would influence the response
+          in any way (explicitly or implicitly); <strong>NO</strong> if it has no
+          effect whatsoever.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          {% if t2_ready %}
+            <span class="badge badge-green">✓ Index ready</span>
+          {% else %}
+            <span class="badge badge-yellow">⚠ Index not built</span>
+          {% endif %}
+          <span class="badge badge-gray">{{ t2_count }} pairs</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
+        {% if t2_ready %}
+          <a href="{{ url_for('task3_redirect') }}" class="btn btn-primary" style="justify-content:center;">
+            Start Task 3 →
           </a>
         {% else %}
           <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">

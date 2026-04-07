@@ -138,6 +138,89 @@
 @media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
 .left-col-wrap { min-height: 100%; }
 
+/* ── Admin overlay ──────────────────────────────────────────────── */
+.admin-overlay {
+  margin-top: 7px; padding: 6px 8px;
+  background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px;
+  font-size: 11px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+}
+.admin-overlay-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; color: #9ca3af; margin-right: 2px;
+}
+.admin-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px; border-radius: 10px; font-size: 11px;
+  border: 1px solid transparent; white-space: nowrap; cursor: default;
+}
+.admin-chip-name { font-weight: 600; }
+.admin-chip-val  { font-weight: 400; font-style: italic; }
+.admin-chip.r-necessary_explicit { background: #dcfce7; border-color: #4ade80; color: #166534; }
+.admin-chip.r-necessary_implicit { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+.admin-chip.r-optional           { background: #fef9c3; border-color: #fde047; color: #854d0e; }
+.admin-chip.r-unnecessary        { background: #f3f4f6; border-color: #d1d5db; color: #6b7280; }
+.admin-chip.r-forbidden          { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.admin-chip.r-none               { background: #f3f4f6; border-color: #e5e7eb; color: #9ca3af; }
+.admin-disagree { font-size: 10px; font-weight: 700; color: #b45309;
+  background: #fef3c7; border: 1px solid #fcd34d; border-radius: 4px;
+  padding: 1px 6px; white-space: nowrap; }
+
+/* ── Expected behaviors panel ──────────────────────────────────────── */
+.beh-panel {
+  margin-top: 8px;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  background: #f0fdf4;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.beh-panel-header {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .4px; color: #166534; margin-bottom: 6px;
+  display: flex; align-items: center;
+}
+.beh-sel-hint {
+  font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0;
+  margin-left: 7px; color: #16a34a;
+}
+.beh-sel-hint.unsel { color: #9ca3af; font-weight: 400; }
+.beh-entry {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 8px; margin-bottom: 4px;
+  border: 1.5px solid transparent; border-radius: 5px;
+  cursor: pointer; transition: background .1s, border-color .1s;
+}
+.beh-entry:last-child { margin-bottom: 0; }
+.beh-entry:hover { background: rgba(0,0,0,.04); border-color: #d1d5db; }
+.beh-entry.selected { border-color: #16a34a; background: #dcfce7; }
+.beh-radio {
+  flex-shrink: 0; width: 14px; text-align: center;
+  font-size: 13px; line-height: 1.6; color: #d1d5db;
+  user-select: none;
+}
+.beh-entry.selected .beh-radio { color: #16a34a; }
+.beh-content { flex: 1; min-width: 0; }
+.beh-model {
+  display: inline-block; font-size: 10px; font-weight: 600;
+  background: #dcfce7; color: #166534; border-radius: 4px;
+  padding: 1px 6px; margin-bottom: 3px;
+}
+.beh-text { color: #374151; display: block; margin-top: 1px; }
+
+.beh-panel.beh-implicit { border-color: #a5f3fc; background: #f0fdff; }
+.beh-panel.beh-implicit .beh-panel-header { color: #0e7490; }
+.beh-panel.beh-implicit .beh-sel-hint { color: #0891b2; }
+.beh-panel.beh-implicit .beh-model { background: #cffafe; color: #0e7490; }
+.beh-panel.beh-implicit .beh-entry.selected { border-color: #0891b2; background: #cffafe; }
+.beh-panel.beh-implicit .beh-entry.selected .beh-radio { color: #0891b2; }
+.beh-warn-badge {
+  display: inline-block; margin-top: 5px;
+  font-size: 11px; font-weight: 600; color: #b45309;
+  background: #fef3c7; border: 1px solid #fcd34d;
+  border-radius: 4px; padding: 1px 7px;
+}
+
 /* ── Sticky column ──────────────────────────────────────────────────── */
 .sticky-col {
   position: sticky;
@@ -405,6 +488,28 @@
                   {% endif %}
                 {% endfor %}
               </div>
+
+              <!-- Expected behaviors panel (populated by JS when explicit/implicit is selected) -->
+              <div class="beh-panel" id="bp-{{ loop.index0 }}" style="display:none;"></div>
+              <span class="beh-warn-badge" id="beh-warn-{{ loop.index0 }}" style="display:none;">⚠ select expected behavior</span>
+
+              {% if admin_annots and admin_annots[loop.index0] %}
+              {% set ann_list = admin_annots[loop.index0] %}
+              {% set unique_vals = ann_list | map(attribute='rating') | list | unique | list %}
+              <div class="admin-overlay">
+                <span class="admin-overlay-label">Annotators</span>
+                {% if unique_vals | length > 1 %}
+                  <span class="admin-disagree">⚠ Disagreement</span>
+                {% endif %}
+                {% for a in ann_list %}
+                  <span class="admin-chip r-{{ a.rating or 'none' }}" title="{{ a.note or '' }}">
+                    <span class="admin-chip-name">{{ a.annotator }}</span>
+                    <span class="admin-chip-val">{{ a.rating or '—' }}</span>
+                  </span>
+                {% endfor %}
+              </div>
+              {% endif %}
+
             </div>
             {% endfor %}
           </div>
@@ -456,8 +561,12 @@ const RATINGS = ['necessary_explicit', 'necessary_implicit', 'optional', 'unnece
 const ANNOTATOR_MODE = {{ 'true' if annotator_mode else 'false' }};
 let isFlagged = {{ 'true' if existing and existing.flagged else 'false' }};
 
-const profileAttrs = {{ profile_attrs | tojson }};
-const itemsByAttr  = {{ items_by_attr | tojson }};
+const profileAttrs   = {{ profile_attrs | tojson }};
+const itemsByAttr    = {{ items_by_attr | tojson }};
+// itemsBehaviors[attribute][model] = {explicit: "...", implicit: "..."}
+const itemsBehaviors = {{ items_behaviors | tojson }};
+// selectedBehaviors[attrIdx] = {explicit: [{model, text}, ...], implicit: [...]}
+const selectedBehaviors = profileAttrs.map(() => ({ explicit: [], implicit: [] }));
 
 const defaultRatings = profileAttrs.map(a =>
   ANNOTATOR_MODE ? 'none'
@@ -476,6 +585,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (r && r.rating && (RATINGS.includes(r.rating) || r.rating === 'none')) {
       currentRatings[i] = r.rating;
       applyRatingUI(i, r.rating);
+      // Restore selections — support both new array format and old single-item format
+      const ik = r.rating === 'necessary_explicit' ? 'explicit'
+               : r.rating === 'necessary_implicit' ? 'implicit' : null;
+      if (ik) {
+        if (Array.isArray(r.selected_behaviors) && r.selected_behaviors.length)
+          selectedBehaviors[i][ik] = r.selected_behaviors;
+        else if (r.selected_behavior)
+          selectedBehaviors[i][ik] = [r.selected_behavior];
+      }
+      updateBehaviorsPanel(i, r.rating);
+      updateBehWarn(i);
     }
   });
   updateIncompleteWarn();
@@ -488,11 +608,37 @@ document.addEventListener('DOMContentLoaded', updateIncompleteWarn);
 function countIncomplete() {
   return currentRatings.filter(r => r === 'none').length;
 }
+function hasBehaviorOptions(attrIdx, impactKey) {
+  const attr = profileAttrs[attrIdx].attribute;
+  return !!(itemsBehaviors[attr] && Object.values(itemsBehaviors[attr]).some(b => b[impactKey]));
+}
+function countMissingBeh() {
+  return profileAttrs.reduce((n, a, i) => {
+    const rating = currentRatings[i];
+    if (rating !== 'necessary_explicit' && rating !== 'necessary_implicit') return n;
+    const ik = rating === 'necessary_explicit' ? 'explicit' : 'implicit';
+    if (!hasBehaviorOptions(i, ik)) return n;
+    return n + (selectedBehaviors[i][ik].length === 0 ? 1 : 0);
+  }, 0);
+}
 function updateIncompleteWarn() {
-  const n = countIncomplete();
+  const nRating = countIncomplete();
+  const nBeh = countMissingBeh();
   const el = document.getElementById('incompleteWarn');
-  if (n > 0) { el.textContent = `${n} attribute${n > 1 ? 's' : ''} not yet rated`; el.style.display = 'inline'; }
+  const parts = [];
+  if (nRating > 0) parts.push(`${nRating} attribute${nRating > 1 ? 's' : ''} not rated`);
+  if (nBeh > 0)    parts.push(`${nBeh} behavior${nBeh > 1 ? 's' : ''} not selected`);
+  if (parts.length) { el.textContent = parts.join(' · '); el.style.display = 'inline'; }
   else { el.style.display = 'none'; }
+}
+function updateBehWarn(idx) {
+  const warn = document.getElementById(`beh-warn-${idx}`);
+  if (!warn) return;
+  const rating = currentRatings[idx];
+  const ik = rating === 'necessary_explicit' ? 'explicit'
+           : rating === 'necessary_implicit' ? 'implicit' : null;
+  warn.style.display = (ik && hasBehaviorOptions(idx, ik) && selectedBehaviors[idx][ik].length === 0)
+    ? 'inline' : 'none';
 }
 
 // ── Flag ───────────────────────────────────────────────────────
@@ -522,6 +668,80 @@ function setRating(idx, val, btn) {
     applyRatingUI(idx, val);
   }
   updateIncompleteWarn();
+  updateBehaviorsPanel(idx, currentRatings[idx]);
+  updateBehWarn(idx);
+}
+
+function updateBehaviorsPanel(idx, val) {
+  const panel = document.getElementById(`bp-${idx}`);
+  if (!panel) return;
+  const attr = profileAttrs[idx] && profileAttrs[idx].attribute;
+  const modelMap = attr && itemsBehaviors[attr];
+  const showBehaviors = (val === 'necessary_explicit' || val === 'necessary_implicit') && modelMap;
+  if (!showBehaviors) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+
+  const impactKey   = val === 'necessary_explicit' ? 'explicit' : 'implicit';
+  const impactLabel = val === 'necessary_explicit' ? 'explicitly' : 'implicitly';
+  const panelClass  = val === 'necessary_explicit' ? '' : ' beh-implicit';
+  const selList     = selectedBehaviors[idx][impactKey];  // array
+
+  const models = Object.entries(modelMap).filter(([m, b]) => b[impactKey]);
+  if (!models.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+
+  const nSel = selList.length;
+  const hintHtml = nSel > 0
+    ? `<span class="beh-sel-hint">✓ ${nSel} selected</span>`
+    : `<span class="beh-sel-hint unsel">select all that apply</span>`;
+
+  const entries = models.map(([m, b], ei) => {
+    const sel = selList.some(s => s.model === m);
+    return (
+      `<div class="beh-entry${sel ? ' selected' : ''}" onclick="selectBehavior(${idx}, '${impactKey}', ${ei})">` +
+      `<span class="beh-radio">${sel ? '☑' : '☐'}</span>` +
+      `<div class="beh-content">` +
+      `<span class="beh-model">${escHtml(m)}</span>` +
+      `<span class="beh-text">${escHtml(b[impactKey])}</span>` +
+      `</div></div>`
+    );
+  }).join('');
+
+  panel.className = `beh-panel${panelClass}`;
+  panel.innerHTML =
+    `<div class="beh-panel-header">If ${impactLabel} incorporated — select best description(s) ${hintHtml}</div>` +
+    entries;
+  panel.style.display = 'block';
+}
+
+function selectBehavior(attrIdx, impactKey, entryIdx) {
+  const attr   = profileAttrs[attrIdx].attribute;
+  const models = Object.entries(itemsBehaviors[attr]).filter(([m, b]) => b[impactKey]);
+  const [model, beh] = models[entryIdx];
+  const text = beh[impactKey];
+  const list = selectedBehaviors[attrIdx][impactKey];
+  const existingIdx = list.findIndex(s => s.model === model);
+
+  // Toggle: remove if already selected, add otherwise
+  if (existingIdx >= 0) list.splice(existingIdx, 1);
+  else list.push({ model, text });
+
+  // Targeted DOM update
+  const panel = document.getElementById(`bp-${attrIdx}`);
+  const newList = selectedBehaviors[attrIdx][impactKey];
+  panel.querySelectorAll('.beh-entry').forEach((el, i) => {
+    const [m] = models[i];
+    const active = newList.some(s => s.model === m);
+    el.classList.toggle('selected', active);
+    const radio = el.querySelector('.beh-radio');
+    if (radio) radio.textContent = active ? '☑' : '☐';
+  });
+  const hint = panel.querySelector('.beh-sel-hint');
+  if (hint) {
+    const n = newList.length;
+    hint.textContent = n > 0 ? `✓ ${n} selected` : 'select all that apply';
+    hint.classList.toggle('unsel', n === 0);
+  }
+  updateBehWarn(attrIdx);
+  updateIncompleteWarn();
 }
 
 function applyRatingUI(idx, val) {
@@ -547,17 +767,21 @@ function resetAllToDefault() {
 function collectPayload() {
   return {
     relevance_judgments: profileAttrs.map((attr, i) => {
-      const itemData = itemsByAttr[attr.attribute] || {};
-      const rating = currentRatings[i];
+      const itemData  = itemsByAttr[attr.attribute] || {};
+      const rating    = currentRatings[i];
+      const impactKey       = rating === 'necessary_explicit' ? 'explicit'
+                            : rating === 'necessary_implicit' ? 'implicit' : null;
+      const selected_behaviors = impactKey ? selectedBehaviors[i][impactKey] : [];
       return {
-        attribute:         attr.attribute,
-        was_relevant:      itemsByAttr.hasOwnProperty(attr.attribute),
-        default_rating:    defaultRatings[i],
+        attribute:           attr.attribute,
+        was_relevant:        itemsByAttr.hasOwnProperty(attr.attribute),
+        default_rating:      defaultRatings[i],
         rating,
-        is_relevant:       RELEVANT_RATINGS.has(rating),
-        changed:           rating !== defaultRatings[i],
-        expected_behavior: itemData.expected_behavior || '',
-        relevance_score:   itemData.relevance || null,
+        is_relevant:         RELEVANT_RATINGS.has(rating),
+        changed:             rating !== defaultRatings[i],
+        expected_behavior:   itemData.expected_behavior || '',
+        relevance_score:     itemData.relevance || null,
+        selected_behaviors,
       };
     }),
     note:    document.getElementById('annotNote').value,

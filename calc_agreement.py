@@ -2,7 +2,7 @@
 """
 Inter-annotator agreement calculator for annotation_tool.
 
-Task 1: per-attribute judgments  ("ok" / "unsure" / "bad")
+Task 1: per-attribute judgments  ("ok" / "bad", "unsure" merged into "bad")
 Task 2: per-attribute ratings    ("necessary_explicit" / "necessary_implicit" /
                                    "optional" / "unnecessary" / "forbidden")
 
@@ -60,7 +60,7 @@ except ImportError:
 
 
 # ── Label orderings ───────────────────────────────────────────────────────────
-TASK1_ORDER = ["ok", "unsure", "bad"]
+TASK1_LABELS = ["ok", "bad"]  # "unsure" is merged into "bad"
 TASK2_ORDER = [
     "necessary_explicit",
     "necessary_implicit",
@@ -378,6 +378,11 @@ def load_annotations(ann_dir: Path, task: str) -> dict[str, list[dict]]:
 
 # ── Task-1 agreement ─────────────────────────────────────────────────────────
 
+def _normalise_task1(label: str) -> str:
+    """Merge 'unsure' into 'bad' — unsure leans negative in practice."""
+    return "bad" if label in ("unsure", "bad") else label
+
+
 def task1_pairs(all_ann: dict[str, list[dict]]) -> dict[tuple, dict[str, str]]:
     item_votes: dict[tuple, dict[str, str]] = defaultdict(dict)
     for annotator, records in all_ann.items():
@@ -385,7 +390,7 @@ def task1_pairs(all_ann: dict[str, list[dict]]) -> dict[tuple, dict[str, str]]:
             for i, j in enumerate(rec.get("attr_judgments") or []):
                 label = j.get("judgment")
                 if label and label not in SKIP_RATING:
-                    item_votes[(rec["index"], i)][annotator] = label
+                    item_votes[(rec["index"], i)][annotator] = _normalise_task1(label)
     return item_votes
 
 
@@ -401,13 +406,13 @@ def compute_task1(ann_dir: Path) -> None:
 
     annotators = sorted(all_ann.keys())
     print(f"  Annotators : {', '.join(annotators)}")
-    print(f"  Scale order: {' < '.join(TASK1_ORDER)}")
+    print(f"  Labels     : {', '.join(TASK1_LABELS)}  (\"unsure\" merged into \"bad\")")
 
     item_votes = task1_pairs(all_ann)
 
-    hdr = f"  {'Pair':<30}  {'N':>5}  {'Agree%':>7}  {'κ':>7}  {'κ_w²':>7}  {'ρ':>7}  {'ICC(3,1)':>9}  {'ICC(2,1)':>9}"
+    hdr = f"  {'Pair':<30}  {'N':>5}  {'Agree%':>7}  {'κ':>7}"
     print(f"\n{hdr}")
-    print("  " + "-" * 85)
+    print("  " + "-" * 55)
     for a1, a2 in combinations(annotators, 2):
         seqs = [
             (votes[a1], votes[a2])
@@ -419,19 +424,16 @@ def compute_task1(ann_dir: Path) -> None:
             continue
         la, lb = list(zip(*seqs))
         la, lb = list(la), list(lb)
-        agree       = sum(x == y for x, y in zip(la, lb)) / len(la) * 100
-        k           = cohen_kappa_nominal(la, lb)
-        k_w2        = cohen_kappa_quadratic(la, lb, TASK1_ORDER)
-        rho         = spearman_rho(la, lb, TASK1_ORDER)
-        icc3, icc2  = icc_pairwise(la, lb, TASK1_ORDER)
-        pair        = f"{a1} vs {a2}"
-        print(f"  {pair:<30}  {len(la):>5}  {agree:>6.1f}%  {k:>7.3f}  {k_w2:>7.3f}  {rho:>7.3f}  {icc3:>9.3f}  {icc2:>9.3f}")
+        agree = sum(x == y for x, y in zip(la, lb)) / len(la) * 100
+        k     = cohen_kappa_nominal(la, lb)
+        pair  = f"{a1} vs {a2}"
+        print(f"  {pair:<30}  {len(la):>5}  {agree:>6.1f}%  {k:>7.3f}")
 
     # Multi-rater
     _print_multirater_task1(item_votes, annotators)
 
     print("\n  Per-label confusion (annotator A → B, aggregated pairwise):")
-    _print_confusion(item_votes, annotators, TASK1_ORDER)
+    _print_confusion(item_votes, annotators, TASK1_LABELS)
     print()
 
 
@@ -439,14 +441,9 @@ def _print_multirater_task1(item_votes: dict, annotators: list[str]) -> None:
     if not _HAS_NP:
         return
     overlap = {k: v for k, v in item_votes.items() if len(v) >= 2}
-    icc1 = icc_oneway(overlap, TASK1_ORDER)
-    alpha = krippendorff_alpha_ordinal(overlap, TASK1_ORDER)
     print(f"\n  Multi-rater (N={len(overlap)} overlapping items):")
-    print(f"    ICC(1,1) one-way  : {icc1:.3f}")
-    print(f"    Krippendorff α_ord: {alpha:.3f}")
     if len(annotators) >= 3:
-        labels = TASK1_ORDER
-        lbl2i  = {l: i for i, l in enumerate(labels)}
+        labels = TASK1_LABELS
         rows = [
             [sum(1 for v in votes.values() if v == l) for l in labels]
             for votes in item_votes.values()

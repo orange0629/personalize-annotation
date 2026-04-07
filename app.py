@@ -156,6 +156,101 @@ def _load_attr_evidence() -> None:
 _load_attr_evidence()
 
 
+# ─── Expected behaviors cache ─────────────────────────────────────────────────
+# Loaded from data/behaviors/*.jsonl, produced by generate_expected_behaviors.py.
+# _behaviors[sample_index][attribute_text] = {model: {"explicit": "...", "implicit": "..."}}
+BEHAVIORS_DIR = BASE_DIR / "data" / "behaviors"
+_behaviors: Dict[int, Dict[str, Dict[str, Dict[str, str]]]] = {}
+
+
+def _load_behaviors() -> None:
+    global _behaviors
+    if not BEHAVIORS_DIR.exists():
+        return
+    files = sorted(BEHAVIORS_DIR.glob("*.jsonl"))
+    if not files:
+        return
+    loaded_models: List[str] = []
+    for fpath in files:
+        with open(fpath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    sidx = rec.get("sample_index")
+                    model = rec.get("model", fpath.stem)
+                    if sidx is None:
+                        continue
+                    _behaviors.setdefault(sidx, {})
+                    for item in rec.get("items", []):
+                        attr = item.get("attribute", "")
+                        if not attr:
+                            continue
+                        _behaviors[sidx].setdefault(attr, {})[model] = {
+                            "explicit": item.get("explicit_behavior", ""),
+                            "implicit": item.get("implicit_behavior", ""),
+                        }
+                except Exception:
+                    continue
+        loaded_models.append(fpath.name)
+    print(
+        f"Loaded expected behaviors for {len(_behaviors)} samples "
+        f"from {len(loaded_models)} file(s): {', '.join(loaded_models)}",
+        flush=True,
+    )
+
+
+_load_behaviors()
+
+
+# ─── Relevance classifications from LLMs ──────────────────────────────────────
+# Loaded from data/relevance/*.jsonl, produced by classify_attribute_relevance.py.
+# _relevance[sample_index][attribute_text][model] = True/False
+RELEVANCE_DIR_APP = BASE_DIR / "data" / "relevance"
+_relevance: Dict[int, Dict[str, Dict[str, bool]]] = {}
+
+
+def _load_relevance() -> None:
+    global _relevance
+    if not RELEVANCE_DIR_APP.exists():
+        return
+    files = sorted(RELEVANCE_DIR_APP.glob("*.jsonl"))
+    if not files:
+        return
+    loaded_models: List[str] = []
+    for fpath in files:
+        with open(fpath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    sidx = rec.get("sample_index")
+                    model = rec.get("model", fpath.stem)
+                    if sidx is None:
+                        continue
+                    _relevance.setdefault(sidx, {})
+                    for item in rec.get("items", []):
+                        attr = item.get("attribute", "")
+                        if not attr:
+                            continue
+                        _relevance[sidx].setdefault(attr, {})[model] = bool(item.get("relevant", False))
+                except Exception:
+                    continue
+        loaded_models.append(fpath.name)
+    print(
+        f"Loaded relevance classifications for {len(_relevance)} samples "
+        f"from {len(loaded_models)} file(s): {', '.join(loaded_models)}",
+        flush=True,
+    )
+
+
+_load_relevance()
+
+
 # ─── File handles (open once, seek on demand) — used only when NOT using extracted ──
 _attrs_fh:    Optional[Any] = None
 _checklist_fh: Optional[Any] = None
@@ -339,8 +434,42 @@ def get_attrs_meta_list() -> List[Dict]:
 
 # ─── Annotation helpers ───────────────────────────────────────────────────────
 
+ADMIN_NAME = "admin"
+
 def annotator_name() -> Optional[str]:
     return session.get("annotator_name")
+
+
+def is_admin() -> bool:
+    return annotator_name() == ADMIN_NAME
+
+
+def load_all_annotators(task: str) -> Dict[str, Dict[str, Any]]:
+    """Load annotations from every annotator file for a task (skips admin).
+    Returns {annotator_safe_name: {index_str: record}}.
+    """
+    suffix = f"_task{task}.jsonl"
+    result: Dict[str, Dict[str, Any]] = {}
+    for fpath in sorted(ANNOT_DIR.glob(f"*{suffix}")):
+        annotator = fpath.name[: -len(suffix)]
+        if annotator == ADMIN_NAME:
+            continue
+        recs: Dict[str, Any] = {}
+        with open(fpath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    key = str(rec.get("index", ""))
+                    if key:
+                        recs[key] = rec
+                except Exception:
+                    continue
+        if recs:
+            result[annotator] = recs
+    return result
 
 
 def annot_file(task: str) -> Path:
@@ -410,6 +539,10 @@ def count_annotated(task: str, total: int) -> int:
         elif task == "2":
             judgments = rec.get("relevance_judgments", [])
             if judgments and all(j.get("rating") not in (None, "none", "") for j in judgments):
+                count += 1
+        elif task == "3":
+            judgments = rec.get("relevance_judgments", [])
+            if judgments and all(j.get("relevant") is not None for j in judgments):
                 count += 1
     return count
 
@@ -497,6 +630,8 @@ def _next_redirect(next_task: str):
         return redirect(url_for("task1_view", idx=0))
     if next_task == "task2":
         return redirect(url_for("task2_view", idx=0))
+    if next_task == "task3":
+        return redirect(url_for("task3_view", idx=0))
     return redirect(url_for("task_select"))
 
 
@@ -635,6 +770,26 @@ def task1_view(idx: int):
         attr_evidence.append(turns_out)
 
     task_done = count_annotated("1", total) >= total
+
+    # Admin overlay: per-attribute list of {annotator, judgment, note} from all annotators
+    admin_annots: Optional[List[List[Dict]]] = None
+    if is_admin():
+        all_annots = load_all_annotators("1")
+        admin_annots = []
+        for a_idx in range(len(merged_attrs)):
+            per_attr = []
+            for ann, recs in all_annots.items():
+                rec = recs.get(str(idx))
+                if rec:
+                    js = rec.get("attr_judgments", [])
+                    if a_idx < len(js):
+                        per_attr.append({
+                            "annotator": ann,
+                            "judgment":  js[a_idx].get("judgment", ""),
+                            "note":      js[a_idx].get("note", ""),
+                        })
+            admin_annots.append(per_attr)
+
     return render_template(
         "task1.html",
         idx=idx,
@@ -646,6 +801,7 @@ def task1_view(idx: int):
         existing=existing,
         is_annotated=is_annotated,
         attr_evidence=attr_evidence,
+        admin_annots=admin_annots,
         annotator_mode=app.config.get("ANNOTATOR_MODE", True),
         show_option_detail=app.config.get("SHOW_OPTION_DETAIL", False),
         task_done=task_done,
@@ -754,6 +910,32 @@ def task2_view(idx: int):
         is_annotated = False
 
     task_done = count_annotated("2", total) >= total
+
+    # Expected behaviors generated by LLMs (from data/behaviors/*.jsonl).
+    # items_behaviors[attribute] = {model: {"explicit": "...", "implicit": "..."}}
+    items_behaviors: Dict[str, Any] = _behaviors.get(idx, {})
+
+    # Admin overlay: per-attribute list of {annotator, rating, note} from all annotators
+    admin_annots: Optional[List[List[Dict]]] = None
+    if is_admin():
+        all_annots = load_all_annotators("2")
+        admin_annots = []
+        for attr in profile_attrs:
+            attr_text = attr.get("attribute", "")
+            per_attr = []
+            for ann, recs in all_annots.items():
+                rec = recs.get(str(idx))
+                if rec:
+                    for j in rec.get("relevance_judgments", []):
+                        if j.get("attribute") == attr_text:
+                            per_attr.append({
+                                "annotator": ann,
+                                "rating":    j.get("rating", ""),
+                                "note":      j.get("note", ""),
+                            })
+                            break
+            admin_annots.append(per_attr)
+
     return render_template(
         "task2.html",
         idx=idx,
@@ -764,6 +946,8 @@ def task2_view(idx: int):
         profile_attrs=profile_attrs,
         items=items,
         items_by_attr=items_by_attr,
+        items_behaviors=items_behaviors,
+        admin_annots=admin_annots,
         annotator=annotator_name(),
         existing=existing,
         is_annotated=is_annotated,
@@ -811,6 +995,182 @@ def task2_list():
             judgments = rec.get("relevance_judgments", [])
             m["annotated"] = bool(judgments) and all(
                 j.get("rating") not in (None, "none", "") for j in judgments
+            )
+        else:
+            m["annotated"] = False
+    return jsonify(meta)
+
+
+# ─── Routes: Task 3 — Attribute Relevance Classification ─────────────────────
+
+@app.route("/task3")
+def task3_redirect():
+    if not annotator_name():
+        return redirect(url_for("index", next="task3"))
+    return redirect(url_for("task3_view", idx=0))
+
+
+@app.route("/task3/<int:idx>")
+def task3_view(idx: int):
+    if not annotator_name():
+        return redirect(url_for("index"))
+
+    total = checklist_count()
+    if total == 0:
+        return render_template("error.html", msg="Checklist index not built yet. Run build_index.py first.")
+
+    idx = max(0, min(idx, total - 1))
+    record = fetch_checklist_record(idx)
+    if not record:
+        return render_template("error.html", msg=f"Could not fetch checklist record {idx}.")
+
+    user_id       = record.get("user_id", "")
+    prompt_text   = record.get("prompt_text", "")
+    profile_attrs = record.get("profile_attributes", [])
+    prompt_index  = record.get("prompt_index", -1)
+
+    # Strip embeddings
+    for a in profile_attrs:
+        a.pop("embedding", None)
+
+    # Load existing annotation
+    existing = load_existing_annotations("3").get(str(idx))
+
+    if existing and existing.get("flagged"):
+        is_annotated = True
+    elif existing:
+        judgments = existing.get("relevance_judgments", [])
+        is_annotated = (
+            len(judgments) == len(profile_attrs) and
+            all(j.get("relevant") is not None for j in judgments)
+        )
+    else:
+        is_annotated = False
+
+    task_done = count_annotated("3", total) >= total
+
+    # LLM relevance classifications: per-attr dict of model -> bool
+    # _relevance[sample_index][attribute][model] = True/False
+    attr_model_relevance: Dict[str, Dict[str, bool]] = _relevance.get(idx, {})
+
+    # Admin overlay: per-attribute list of {annotator, relevant} from all annotators
+    # Also load LLM classifications for admin analysis
+    admin_annots: Optional[List[List[Dict]]] = None
+    admin_agreement: Optional[List[Dict]] = None  # per-attr agreement stats
+    global_agreement: Optional[Dict] = None       # overall cross-rater stats
+    if is_admin():
+        from analyze_relevance_agreement import (
+            load_model_votes as _load_mv,
+            load_human_votes as _load_hv,
+            build_agreement_data,
+            RELEVANCE_DIR as _REL_DIR,
+            ANNOT_DIR as _ANN_DIR,
+        )
+        global_agreement = build_agreement_data(
+            _load_mv(_REL_DIR),
+            _load_hv(_ANN_DIR, skip_admin=False),
+        )
+        all_annots = load_all_annotators("3")
+        admin_annots = []
+        admin_agreement = []
+        for attr in profile_attrs:
+            attr_text = attr.get("attribute", "")
+            per_attr: List[Dict] = []
+            for ann, recs in all_annots.items():
+                rec = recs.get(str(idx))
+                if rec:
+                    for j in rec.get("relevance_judgments", []):
+                        if j.get("attribute") == attr_text:
+                            per_attr.append({
+                                "annotator": ann,
+                                "relevant":  j.get("relevant"),
+                                "note":      j.get("note", ""),
+                            })
+                            break
+            admin_annots.append(per_attr)
+
+            # Agreement analysis across annotators + models
+            model_votes = attr_model_relevance.get(attr_text, {})
+            human_votes = [p["relevant"] for p in per_attr if p["relevant"] is not None]
+            all_votes = list(model_votes.values()) + human_votes
+
+            n_yes = sum(1 for v in all_votes if v)
+            n_no  = sum(1 for v in all_votes if not v)
+            n_total = len(all_votes)
+            # Simple agreement: fraction of majority
+            if n_total == 0:
+                agreement_pct = None
+            else:
+                agreement_pct = round(100 * max(n_yes, n_no) / n_total)
+
+            admin_agreement.append({
+                "attr": attr_text,
+                "model_votes": model_votes,
+                "n_human_yes": sum(1 for v in human_votes if v),
+                "n_human_no":  sum(1 for v in human_votes if not v),
+                "n_model_yes": sum(1 for v in model_votes.values() if v),
+                "n_model_no":  sum(1 for v in model_votes.values() if not v),
+                "agreement_pct": agreement_pct,
+                "disagreement": n_total > 1 and n_yes > 0 and n_no > 0,
+            })
+
+    return render_template(
+        "task3.html",
+        idx=idx,
+        total=total,
+        user_id=user_id,
+        prompt_text=prompt_text,
+        prompt_index=prompt_index,
+        profile_attrs=profile_attrs,
+        attr_model_relevance=attr_model_relevance,
+        admin_annots=admin_annots,
+        admin_agreement=admin_agreement,
+        global_agreement=global_agreement,
+        annotator=annotator_name(),
+        existing=existing,
+        is_annotated=is_annotated,
+        is_admin=is_admin(),
+        task_done=task_done,
+    )
+
+
+@app.route("/task3/<int:idx>/save", methods=["POST"])
+def task3_save(idx: int):
+    if not annotator_name():
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
+
+    data = request.get_json(force=True)
+    meta = fetch_checklist_record(idx) or {}
+    record = {
+        "task": "3",
+        "index": idx,
+        "user_id": meta.get("user_id", ""),
+        "prompt_index": meta.get("prompt_index", -1),
+        "relevance_judgments": data.get("relevance_judgments", []),
+        "note": data.get("note", ""),
+        "flagged": data.get("flagged", False),
+    }
+    save_annotation("3", record)
+    total = checklist_count()
+    all_done = total > 0 and count_annotated("3", total) >= total
+    return jsonify({"ok": True, "all_done": all_done})
+
+
+@app.route("/task3/list")
+def task3_list():
+    """Return JSON list of checklist records for jump navigator."""
+    if not annotator_name():
+        return jsonify([])
+    meta = get_checklist_meta_list()
+    existing = load_existing_annotations("3")
+    for m in meta:
+        rec = existing.get(str(m["annotation_index"]))
+        if rec and rec.get("flagged"):
+            m["annotated"] = True
+        elif rec:
+            judgments = rec.get("relevance_judgments", [])
+            m["annotated"] = bool(judgments) and all(
+                j.get("relevant") is not None for j in judgments
             )
         else:
             m["annotated"] = False
