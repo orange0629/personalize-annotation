@@ -334,7 +334,7 @@
       <p style="font-size:14px; color:#555; line-height:1.6; margin-bottom:24px;">
         All items are annotated. <strong>Go to the completion page to get your Prolific code and submit your work.</strong>
       </p>
-      <a href="/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
+      <a href="/task2/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
         Go to Completion Page →
       </a>
       <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none; border:none; font-size:12px; color:#aaa; cursor:pointer; text-decoration:underline;">
@@ -653,7 +653,7 @@ async function toggleFlag() {
         body: JSON.stringify(collectPayload()),
       });
       const d = await resp.json();
-      if (d.all_done) { location.href = '/complete'; return; }
+      if (d.all_done) { location.href = '/task2/complete'; return; }
     } catch(e) {}
     {% if idx < total - 1 %}location.href = '/task2/{{ idx + 1 }}';{% endif %}
   }
@@ -800,7 +800,7 @@ function saveAnnotation() {
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
-      if (d.all_done) { location.href = '/complete'; return; }
+      if (d.all_done) { location.href = '/task2/complete'; return; }
       const n = countIncomplete();
       const msg = n > 0 ? `✓ Saved (${n} attr${n>1?'s':''} unrated)` : '✓ Saved';
       const type = n > 0 ? 'warning' : 'saved';
@@ -826,7 +826,7 @@ async function saveAndNavigate(url) {
       body: JSON.stringify(collectPayload()),
     });
     const d = await resp.json();
-    if (d.all_done) { location.href = '/complete'; return; }
+    if (d.all_done) { location.href = '/task2/complete'; return; }
   } catch(e) {}
   location.href = url;
 }

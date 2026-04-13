@@ -449,7 +449,7 @@ def count_annotated(task: str, total: int) -> int:
 # ─── Conversation HTML builder (adapted from visualize_score_assistant_like_usage.py) ──
 
 def build_chat_html(conversations: Any, max_convs: int = 500, max_turns_per_conv: int = 500,
-                    short_chars: int = 200, long_chars: int = 1600,
+                    short_chars: int = 200, long_chars: int = 10000,
                     c_idx_start: int = 0, total_panels: int = 1) -> str:
     if not conversations:
         return '<div class="chat-empty">No messages.</div>'
@@ -490,7 +490,7 @@ def build_chat_html(conversations: Any, max_convs: int = 500, max_turns_per_conv
                 "msg-assistant" if role in {"ASSISTANT", "SYSTEM", "TOOL"} else "msg-other"
             )
             safe_role = html.escape(role)
-            data_attrs = f'data-conv-idx="{c_idx}" data-turn-idx="{t_idx}"'
+            data_attrs = f'data-conv-idx="{c_idx_start + c_idx}" data-turn-idx="{t_idx}"'
 
             if len(text) <= short_chars:
                 # Short enough — plain non-expandable div
@@ -618,12 +618,19 @@ def task1_view(idx: int):
         if turns:
             all_convs.append(turns)
 
-    # Build chat HTML per conversation record
+    # Build chat HTML per conversation record.
+    # all_conv_idx counts only non-empty conversations, matching the indexing
+    # used by extract_convs() in generate_attr_evidence.py (and thus the cache).
     total_panels = len(conv_records)
     conv_htmls = []
-    for panel_idx, cr in enumerate(conv_records):
+    all_conv_idx = 0
+    for cr in conv_records:
         conv = cr.get("conversation")
-        ch = build_chat_html(conv, c_idx_start=panel_idx, total_panels=total_panels) if conv else '<div class="chat-empty">No conversation data.</div>'
+        if conv:
+            ch = build_chat_html(conv, c_idx_start=all_conv_idx, total_panels=total_panels)
+            all_conv_idx += 1
+        else:
+            ch = '<div class="chat-empty">No conversation data.</div>'
         model_raw = cr.get("model", "")
         if isinstance(model_raw, list):
             model_display = ", ".join(dict.fromkeys(m for m in model_raw if m))
@@ -671,6 +678,38 @@ def task1_view(idx: int):
                         "conv_idx": c_idx,
                         "turn_idx": t_idx,
                     })
+                else:
+                    # turn_idx is out of range for the cached conv_idx — the LLM
+                    # got the conversation number wrong. Search neighboring convs
+                    # for the first one where t_idx is in range.
+                    remapped = False
+                    for alt_c in range(len(all_convs)):
+                        if alt_c == c_idx:
+                            continue
+                        alt_conv = all_convs[alt_c]
+                        if 0 <= t_idx < len(alt_conv):
+                            turn = alt_conv[t_idx]
+                            print(
+                                f"[evidence remap] user={user_id} attr={i} "
+                                f"conv_idx={c_idx} turn_idx={t_idx} out of range "
+                                f"(conv has {len(conv)} turns) -> remapped to conv_idx={alt_c}",
+                                flush=True,
+                            )
+                            turns_out.append({
+                                "role": (turn.get("role") or "").upper(),
+                                "text": (turn.get("content") or "").strip()[:600],
+                                "conv_idx": alt_c,
+                                "turn_idx": t_idx,
+                            })
+                            remapped = True
+                            break
+                    if not remapped:
+                        print(
+                            f"[evidence remap] user={user_id} attr={i} "
+                            f"conv_idx={c_idx} turn_idx={t_idx} out of range "
+                            f"and no alternative conv found — skipping",
+                            flush=True,
+                        )
         attr_evidence.append(turns_out)
 
     task_done = count_annotated("1", total) >= total
@@ -1135,11 +1174,11 @@ def task3_list():
     return jsonify(result)
 
 
-@app.route("/task3/complete")
-def task3_complete():
+@app.route("/task1/complete")
+def task1_complete():
     if not annotator_name():
         return redirect(url_for("index"))
-    prolific_code = app.config.get("PROLIFIC_CODE_TASK3", "")
+    prolific_code = app.config.get("PROLIFIC_CODE_TASK1", "")
     prolific_url  = (
         f"https://app.prolific.com/submissions/complete?cc={prolific_code}"
         if prolific_code else ""
@@ -1152,14 +1191,32 @@ def task3_complete():
     )
 
 
-# ─── Completion route ─────────────────────────────────────────────────────────
-
-@app.route("/complete")
-def complete():
+@app.route("/task2/complete")
+def task2_complete():
     if not annotator_name():
         return redirect(url_for("index"))
-    prolific_url = app.config.get("PROLIFIC_COMPLETION_URL", "")
-    prolific_code = app.config.get("PROLIFIC_CODE", "")
+    prolific_code = app.config.get("PROLIFIC_CODE_TASK2", "")
+    prolific_url  = (
+        f"https://app.prolific.com/submissions/complete?cc={prolific_code}"
+        if prolific_code else ""
+    )
+    return render_template(
+        "complete.html",
+        prolific_url=prolific_url,
+        prolific_code=prolific_code,
+        annotator=annotator_name(),
+    )
+
+
+@app.route("/task3/complete")
+def task3_complete():
+    if not annotator_name():
+        return redirect(url_for("index"))
+    prolific_code = app.config.get("PROLIFIC_CODE_TASK3", "")
+    prolific_url  = (
+        f"https://app.prolific.com/submissions/complete?cc={prolific_code}"
+        if prolific_code else ""
+    )
     return render_template(
         "complete.html",
         prolific_url=prolific_url,
@@ -1202,7 +1259,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task1-max-users",
         type=int,
-        default=100,
+        default=10,
         help="Max number of users shown in Task 1 (default: 100).",
     )
     parser.add_argument(
@@ -1212,14 +1269,14 @@ if __name__ == "__main__":
         help="Max number of pairs shown in Task 2 (0 = no limit).",
     )
     parser.add_argument(
-        "--prolific-completion-url",
-        default="https://app.prolific.com/submissions/complete?cc=C8LTQ4U9",
-        help="Full Prolific completion URL shown on the done page.",
+        "--prolific-code-task1",
+        default="C8LTQ4U9",
+        help="Prolific completion code for Task 1.",
     )
     parser.add_argument(
-        "--prolific-code",
-        default="C8LTQ4U9",
-        help="Prolific completion code displayed on the done page.",
+        "--prolific-code-task2",
+        default="",
+        help="Prolific completion code for Task 2.",
     )
     parser.add_argument(
         "--task3-max-prompts",
@@ -1229,7 +1286,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prolific-code-task3",
-        default="",
+        default="C1RIAWIP",
         help="Prolific completion code for Task 3.",
     )
     args = parser.parse_args()
@@ -1241,7 +1298,7 @@ if __name__ == "__main__":
 
     app.config["ANNOTATOR_MODE"] = (args.mode == "annotator")
     app.config["SHOW_OPTION_DETAIL"] = args.show_option_detail
-    app.config["PROLIFIC_COMPLETION_URL"] = args.prolific_completion_url
-    app.config["PROLIFIC_CODE"] = args.prolific_code
+    app.config["PROLIFIC_CODE_TASK1"] = args.prolific_code_task1
+    app.config["PROLIFIC_CODE_TASK2"] = args.prolific_code_task2
     app.config["PROLIFIC_CODE_TASK3"] = args.prolific_code_task3
     app.run(host=args.host, port=args.port, debug=args.debug)
