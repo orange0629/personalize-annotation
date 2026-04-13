@@ -26,11 +26,15 @@ DATA_DIR    = Path(__file__).parent / "data" / "indexes"
 EXTRACT_DIR = Path(__file__).parent / "data" / "extracted"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+TASK1_ITEMS = EXTRACT_DIR / "task1_items.jsonl"
+TASK2_ITEMS = EXTRACT_DIR / "task2_items.jsonl"
+
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE = Path("/shared/0/projects/research-jam-summer-2024/tmp")
-ATTRS_JSONL       = BASE / "attrs_per_conversation_final_merged_agglo_0.7_v2.jsonl"
+# ATTRS_JSONL       = BASE / "attrs_per_conversation_final_merged_agglo_0.7_v2.jsonl"
+ATTRS_JSONL       = "/home/leczhang/research/llm-personalization/data/attrs_per_conversation_final_merged_agglo_0.7_v2_sampled_1000.jsonl"
 CHECKLIST_JSONL   = BASE / "checklist_final_merged_agglo_0.7_v2_LIMA.jsonl"
-CONVS_JSONL       = BASE / "wildchat_long_conversations_15_assistant_like_confidence_final.jsonl"
+CONVS_JSONL       = BASE / "wildchat_long_conversations_15_assistant_like_confidence_final_english_v1.jsonl"
 
 ATTRS_INDEX_DB    = DATA_DIR / "attrs_index.db"
 CHECKLIST_INDEX_DB = DATA_DIR / "checklist_index.db"
@@ -176,6 +180,7 @@ def build_convs_index(force: bool = False) -> None:
     """)
 
     count = 0
+    filtered = 0
     with open(CONVS_JSONL, "rb") as f:
         while True:
             offset = f.tell()
@@ -187,6 +192,11 @@ def build_convs_index(force: bool = False) -> None:
                 continue
             try:
                 d = json.loads(raw)
+                # Keep only conversations with at most 1 non-English turn (skip if field absent)
+                is_english = d.get("is_english")
+                if is_english is not None and sum(1 for v in is_english if not v) > 1:
+                    filtered += 1
+                    continue
                 hashed_ip = d.get("hashed_ip", "")
                 conv_hash_raw = d.get("conversation_hash", "")
                 # conversation_hash may be a list or a string
@@ -208,7 +218,7 @@ def build_convs_index(force: bool = False) -> None:
 
     conn.commit()
     conn.close()
-    _progress(f"[convs] Done. {count} records indexed.")
+    _progress(f"[convs] Done. {count} records indexed, {filtered} filtered (non-English).")
 
 
 def build_checklist_sample(
@@ -395,6 +405,206 @@ def extract_data(force: bool = False) -> None:
     )
 
 
+TASK1_WILDCHAT_N = 50   # first N Wildchat users (after english filtering)
+TASK1_EXTRA_N    = 10   # random users per extra source
+TASK1_RANDOM_SEED = 42
+
+# Extra sources: (source_name, attrs_jsonl, personas_jsonl)
+EXTRA_SOURCES = [
+    ("cupid",
+     Path("/home/leczhang/research/llm-personalization/data/cupid_attrs_merged_agglo_0.7.jsonl"),
+     Path("/home/leczhang/research/llm-personalization/data/cupid_100personas.jsonl")),
+#     ("personamem",
+#     Path("/home/leczhang/research/llm-personalization/data/personamem_attrs_merged_agglo_0.7.jsonl"),
+#     Path("/home/leczhang/research/llm-personalization/data/personamem_100personas.jsonl")),
+    ("prefeval",
+     Path("/home/leczhang/research/llm-personalization/data/prefeval_attrs_merged_agglo_0.7.jsonl"),
+     Path("/home/leczhang/research/llm-personalization/data/prefeval_100personas.jsonl")),
+]
+
+
+def _load_extra_source(source_name: str, attrs_path: Path, personas_path: Path, n: int, rng) -> list:
+    """Load n random users from an extra source, returning task1-format items (without item_index)."""
+    # Load attrs: user_id -> merged_attributes
+    attrs_map = {}
+    with open(attrs_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = _strip_embeddings(json.loads(line))
+            attrs_map[str(rec["user_id"])] = rec.get("merged_attributes", [])
+
+    # Load personas: hashed_ip (== user_id) -> list of conversation records
+    convs_map = {}
+    with open(personas_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            uid = str(rec.get("hashed_ip", ""))
+            if uid:
+                convs_map.setdefault(uid, []).append(rec)
+
+    # Only keep users present in both files
+    valid_users = [uid for uid in attrs_map if uid in convs_map]
+    sampled = rng.sample(valid_users, min(n, len(valid_users)))
+
+    items = []
+    for uid in sampled:
+        items.append({
+            "user_id": uid,
+            "source": source_name,
+            "merged_attributes": attrs_map[uid],
+            "conversations": convs_map[uid],
+        })
+    return items
+
+
+def build_task1_items(force: bool = False) -> None:
+    """
+    Build task1_items.jsonl combining:
+      - First TASK1_WILDCHAT_N Wildchat users (after English filtering)
+      - TASK1_EXTRA_N random users each from cupid, personamem, prefeval
+    Items are shuffled with TASK1_RANDOM_SEED and tagged with a 'source' field.
+    """
+    import random
+    EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
+    if TASK1_ITEMS.exists() and not force:
+        _progress(f"[task1] {TASK1_ITEMS.name} already exists. Use --force to rebuild.")
+        return
+    if not ATTRS_INDEX_DB.exists():
+        _progress("[task1] attrs index not found — run without --extract-only to build it first.")
+        return
+    if not CONVS_INDEX_DB.exists():
+        _progress("[task1] convs index not found — run without --extract-only to build it first.")
+        return
+
+    _progress("[task1] Building task1_items.jsonl ...")
+
+    # ── Wildchat: first TASK1_WILDCHAT_N users with valid convs ──────────────
+    with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=30) as conn:
+        attrs_rows = conn.execute(
+            "SELECT line_index, user_id, byte_offset FROM attrs_index ORDER BY line_index"
+        ).fetchall()
+
+    with sqlite3.connect(str(CONVS_INDEX_DB), timeout=30) as conn:
+        conv_rows = conn.execute(
+            "SELECT hashed_ip, byte_offset FROM convs_index ORDER BY id"
+        ).fetchall()
+    convs_map: dict = {}
+    for ip, off in conv_rows:
+        convs_map.setdefault(ip, []).append(off)
+
+    wildchat_items = []
+    skipped = 0
+    with open(ATTRS_JSONL, "rb") as attrs_fh, open(CONVS_JSONL, "rb") as convs_fh:
+        for line_index, user_id, attrs_offset in attrs_rows:
+            if len(wildchat_items) >= TASK1_WILDCHAT_N:
+                break
+            if user_id not in convs_map:
+                skipped += 1
+                continue
+            attrs_fh.seek(attrs_offset)
+            rec = _strip_embeddings(json.loads(attrs_fh.readline()))
+            conversations = []
+            for conv_offset in convs_map[user_id]:
+                convs_fh.seek(conv_offset)
+                try:
+                    raw = json.loads(convs_fh.readline())
+                    conv_field = raw.get("conversation", [])
+                    if conv_field and isinstance(conv_field[0], list):
+                        # Nested list of sub-conversations — split into one record each
+                        for sub_conv in conv_field:
+                            entry = dict(raw)
+                            entry["conversation"] = sub_conv
+                            conversations.append(entry)
+                    else:
+                        conversations.append(raw)
+                except Exception:
+                    continue
+            if not conversations:
+                skipped += 1
+                continue
+            wildchat_items.append({
+                "user_id": user_id,
+                "source": "wildchat",
+                "merged_attributes": rec.get("merged_attributes", []),
+                "conversations": conversations,
+            })
+    _progress(f"  [task1] {len(wildchat_items)} Wildchat users collected ({skipped} skipped).")
+
+    # ── Extra sources ─────────────────────────────────────────────────────────
+    rng = random.Random(TASK1_RANDOM_SEED)
+    all_items = list(wildchat_items)
+    for source_name, attrs_path, personas_path in EXTRA_SOURCES:
+        items = _load_extra_source(source_name, attrs_path, personas_path, TASK1_EXTRA_N, rng)
+        _progress(f"  [task1] {len(items)} users from {source_name}.")
+        all_items.extend(items)
+
+    # ── Shuffle and write ─────────────────────────────────────────────────────
+    rng.shuffle(all_items)
+    tmp = TASK1_ITEMS.with_suffix(".jsonl.tmp")
+    with open(tmp, "w", encoding="utf-8") as out_f:
+        for item_index, item in enumerate(all_items):
+            item["item_index"] = item_index
+            out_f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    tmp.replace(TASK1_ITEMS)
+    _progress(f"[task1] Done. {len(all_items)} items -> {TASK1_ITEMS.name} "
+              f"(wildchat={len(wildchat_items)}, "
+              + ", ".join(f"{s}={TASK1_EXTRA_N}" for s, _, _ in EXTRA_SOURCES) + ")")
+
+
+def build_task2_items(force: bool = False) -> None:
+    """
+    Build task2_items.jsonl: one record per checklist sample entry (used by Task 2 and Task 3).
+    Uses the SQLite checklist index as cache (must be built first).
+    """
+    EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
+    if TASK2_ITEMS.exists() and not force:
+        _progress(f"[task2] {TASK2_ITEMS.name} already exists. Use --force to rebuild.")
+        return
+    if not CHECKLIST_INDEX_DB.exists():
+        _progress("[task2] checklist index not found — run without --extract-only to build it first.")
+        return
+
+    _progress("[task2] Building task2_items.jsonl ...")
+
+    with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=30) as conn:
+        has_sample = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='checklist_sample'"
+        ).fetchone() is not None
+        if has_sample:
+            rows = conn.execute("""
+                SELECT cs.sample_index, ci.byte_offset
+                FROM checklist_sample cs
+                JOIN checklist_index ci ON cs.annotation_index = ci.annotation_index
+                ORDER BY cs.sample_index
+            """).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT annotation_index, byte_offset FROM checklist_index ORDER BY annotation_index"
+            ).fetchall()
+
+    if not rows:
+        _progress("[task2] No checklist records found.")
+        return
+
+    n = len(rows)
+    tmp = TASK2_ITEMS.with_suffix(".jsonl.tmp")
+    with open(CHECKLIST_JSONL, "rb") as fh, open(tmp, "w", encoding="utf-8") as out_f:
+        for item_index, (_, offset) in enumerate(rows):
+            fh.seek(offset)
+            rec = _strip_embeddings(json.loads(fh.readline()))
+            rec["item_index"] = item_index
+            out_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            if (item_index + 1) % 1000 == 0:
+                _progress(f"  [task2] {item_index + 1}/{n}")
+    tmp.replace(TASK2_ITEMS)
+    _progress(f"[task2] Done. {n} items -> {TASK2_ITEMS.name}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build byte-offset indexes for annotation tool.")
     parser.add_argument("--skip-checklist",  action="store_true")
@@ -448,7 +658,8 @@ def main() -> None:
         # Sample is fast to rebuild — force it when --force is set or when it's missing
         if args.force or not _table_exists(CHECKLIST_INDEX_DB, "checklist_sample"):
             build_checklist_sample(n_per_user=args.n_per_user, force=True, skip_prompt_indexes=skip_set)
-        extract_data(force=args.force)
+        build_task1_items(force=args.force)
+        build_task2_items(force=args.force)
 
     _progress("All done.")
 
