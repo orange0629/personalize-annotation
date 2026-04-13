@@ -160,7 +160,7 @@
         {% if idx < total - 1 %}
           <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('{{ url_for('task3_view', idx=idx+1) }}')">Save &amp; Next →</button>
         {% else %}
-          <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('/complete')">Save &amp; Finish ✓</button>
+          <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('/task3/complete')">Save &amp; Finish ✓</button>
         {% endif %}
 
         <span style="flex:1;"></span>
@@ -172,12 +172,14 @@
       <!-- Instruction -->
       <div class="instr-banner">
         📋 <strong>Task 3:</strong> For each profile attribute, decide whether it should be taken into account when personalizing the response to this prompt.
+        <ul style="margin: 6px 0 0 0; padding-left: 18px; font-size: 13px;">
+          <li><strong>YES</strong> — the attribute would influence the response in any way (explicitly mentioned, or implicitly shaping tone/vocabulary/examples/depth).</li>
+          <li><strong>NO</strong> — the attribute has absolutely no bearing on the response; the reply would be identical without it.</li>
+        </ul>
         <details>
-          <summary class="instr-toggle">View full instructions ▸</summary>
+          <summary class="instr-toggle" style="margin-top:6px;">View full instructions ▸</summary>
           <div class="instr-full">
             <ul>
-              <li><strong>YES</strong> — the attribute would influence the response in any way (explicitly mentioned, or implicitly shaping tone/vocabulary/examples/depth).</li>
-              <li><strong>NO</strong> — the attribute has absolutely no bearing on the response; the reply would be identical without it.</li>
               <li>Even a subtle or invisible influence counts as <strong>YES</strong>.</li>
               <li>Click <strong>🚩 Flag</strong> if the content makes you uncomfortable — it will auto-save and move on.</li>
             </ul>
@@ -195,7 +197,7 @@
       <p style="font-size:14px; color:#555; line-height:1.6; margin-bottom:24px;">
         All items are annotated. <strong>Go to the completion page to get your Prolific code and submit your work.</strong>
       </p>
-      <a href="/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
+      <a href="/task3/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
         Go to Completion Page →
       </a>
       <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none; border:none; font-size:12px; color:#aaa; cursor:pointer; text-decoration:underline;">
@@ -410,8 +412,8 @@
                   onclick="setRelevant({{ loop.index0 }}, false, this)">NO</button>
               </div>
 
-              <!-- Model votes (always shown) -->
-              {% if model_votes %}
+              <!-- Model votes (admin only) -->
+              {% if is_admin and model_votes %}
               <div style="margin-top:6px;">
                 <span class="mv-label">Model votes:</span>
                 <div class="model-votes">
@@ -580,7 +582,7 @@ function toggleFlag() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(collectPayload()),
     }).then(r => r.json()).then(d => {
-      if (d.all_done) { location.href = '/complete'; return; }
+      if (d.all_done) { location.href = '/task3/complete'; return; }
       {% if idx < total - 1 %}location.href = '/task3/{{ idx + 1 }}';{% endif %}
     }).catch(() => {});
   }
@@ -608,7 +610,6 @@ function saveAnnotation() {
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
-      if (d.all_done) { location.href = '/complete'; return; }
       const n = countIncomplete();
       const msg = n > 0 ? `✓ Saved (${n} unrated)` : '✓ Saved';
       const type = n > 0 ? 'warning' : 'saved';
@@ -634,7 +635,14 @@ async function saveAndNavigate(url) {
       body: JSON.stringify(collectPayload()),
     });
     const d = await resp.json();
-    if (d.all_done) { location.href = '/complete'; return; }
+    if (url === '/task3/complete') {
+      if (d.all_done) { location.href = '/task3/complete'; return; }
+      // Not all prompts annotated yet — stay on current page
+      if (st1) showSaveStatus(st1, 'warning', '✓ Saved — finish all prompts first');
+      setTimeout(() => { if (st1) st1.style.opacity = '0'; }, 3500);
+      return;
+    }
+    if (d.all_done) { location.href = '/task3/complete'; return; }
   } catch(e) {}
   location.href = url;
 }
@@ -656,7 +664,7 @@ function filterJumpList() {
   const q = document.getElementById('jumpSearch').value.toLowerCase();
   renderJumpList(jumpItems.filter(item =>
     String(item.annotation_index).includes(q) ||
-    item.user_id.toLowerCase().includes(q) ||
+    String(item.prompt_index || '').includes(q) ||
     (item.prompt_snippet || '').toLowerCase().includes(q)
   ));
 }

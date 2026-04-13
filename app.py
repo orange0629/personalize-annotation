@@ -16,6 +16,7 @@ import argparse
 import html
 import json
 import os
+import random
 import sqlite3
 import time
 from datetime import datetime
@@ -62,8 +63,9 @@ EXTRACTED_CHECKLIST  = EXTRACT_DIR / "checklist_sample.jsonl"
 EXTRACTED_CONVS      = EXTRACT_DIR / "convs.jsonl"
 
 # ─── Task settings (overridable via CLI) ──────────────────────────────────────
-TASK1_MAX_USERS = 100  # Only show the first N users for Task 1
-TASK2_MAX_ITEMS = 0    # 0 = no limit; set via --task2-max-items
+TASK1_MAX_USERS   = 100  # Only show the first N users for Task 1
+TASK2_MAX_ITEMS   = 0    # 0 = no limit; set via --task2-max-items
+TASK3_MAX_PROMPTS = 5    # Max unique prompts for Task 3; set via --task3-max-prompts
 
 # ─── Flask setup ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -251,6 +253,62 @@ def _load_relevance() -> None:
 _load_relevance()
 
 
+# ─── Task 3 prompt-level data ─────────────────────────────────────────────────
+# Groups checklist records by prompt_index, merges all users' profile attributes
+# for each prompt, and shuffles them with a deterministic seed (prompt_index) so
+# every annotator sees the same randomized order.
+#
+# Each entry:  {prompt_index, prompt_text, attributes: [{attribute, user_id, sample_index}]}
+# Stored in canonical shuffled order; judgments are saved by attribute text.
+_task3_prompts: List[Dict] = []
+
+
+def _build_task3_prompts() -> None:
+    global _task3_prompts
+    if not _checklist_list:
+        return
+    groups: Dict[int, Dict] = {}
+    for rec in _checklist_list:
+        pidx = rec.get("prompt_index", -1)
+        if pidx < 0:
+            continue
+        if pidx not in groups:
+            groups[pidx] = {
+                "prompt_index": pidx,
+                "prompt_text":  rec.get("prompt_text", ""),
+                "attributes":   [],
+                "seen":         set(),
+            }
+        for attr in rec.get("profile_attributes", []):
+            attr.pop("embedding", None)
+            text = attr.get("attribute", "")
+            if text and text not in groups[pidx]["seen"]:
+                groups[pidx]["seen"].add(text)
+                groups[pidx]["attributes"].append({
+                    "attribute":    text,
+                    "user_id":      rec.get("user_id", ""),
+                    "sample_index": rec.get("sample_index", -1),
+                })
+
+    _task3_prompts = []
+    for pidx in sorted(groups.keys()):
+        g = groups[pidx]
+        attrs_orig = list(g["attributes"])          # original insertion order (for admin)
+        attrs = list(attrs_orig)
+        random.Random(pidx).shuffle(attrs)           # reproducible per-prompt shuffle (for annotators)
+        _task3_prompts.append({
+            "prompt_index":    pidx,
+            "prompt_text":     g["prompt_text"],
+            "attributes":      attrs,
+            "attributes_orig": attrs_orig,
+        })
+    print(f"Built {len(_task3_prompts)} Task-3 prompts "
+          f"(limit: {TASK3_MAX_PROMPTS}).", flush=True)
+
+
+_build_task3_prompts()
+
+
 # ─── File handles (open once, seek on demand) — used only when NOT using extracted ──
 _attrs_fh:    Optional[Any] = None
 _checklist_fh: Optional[Any] = None
@@ -312,6 +370,11 @@ def checklist_count() -> int:
             else:
                 n = conn.execute("SELECT COUNT(*) FROM checklist_index").fetchone()[0]
     return min(n, TASK2_MAX_ITEMS) if TASK2_MAX_ITEMS > 0 else n
+
+
+def task3_count() -> int:
+    n = len(_task3_prompts)
+    return min(n, TASK3_MAX_PROMPTS) if TASK3_MAX_PROMPTS > 0 else n
 
 
 def fetch_attrs_record(line_index: int) -> Optional[Dict]:
@@ -526,6 +589,29 @@ def count_annotated(task: str, total: int) -> int:
     """Count how many of the [0, total) items this annotator has fully completed."""
     existing = load_existing_annotations(task)
     count = 0
+    if task == "3":
+        # Task 3 records are keyed by sample_index (one per user-prompt pair).
+        # A prompt is "done" when every attribute across all its sample records
+        # has a non-None judgment, or any record for the prompt is flagged.
+        for prompt_rec in _task3_prompts[:task3_count()]:
+            attrs = prompt_rec.get("attributes", [])
+            prompt_done = False
+            for attr_entry in attrs:
+                rec = existing.get(str(attr_entry["sample_index"]))
+                if rec and rec.get("flagged"):
+                    prompt_done = True
+                    break
+            if not prompt_done:
+                prompt_done = bool(attrs) and all(
+                    any(
+                        j.get("attribute") == a["attribute"] and j.get("relevant") is not None
+                        for j in existing.get(str(a["sample_index"]), {}).get("relevance_judgments", [])
+                    )
+                    for a in attrs
+                )
+            if prompt_done:
+                count += 1
+        return count
     for i in range(total):
         rec = existing.get(str(i))
         if not rec:
@@ -539,10 +625,6 @@ def count_annotated(task: str, total: int) -> int:
         elif task == "2":
             judgments = rec.get("relevance_judgments", [])
             if judgments and all(j.get("rating") not in (None, "none", "") for j in judgments):
-                count += 1
-        elif task == "3":
-            judgments = rec.get("relevance_judgments", [])
-            if judgments and all(j.get("relevant") is not None for j in judgments):
                 count += 1
     return count
 
@@ -1015,26 +1097,47 @@ def task3_view(idx: int):
     if not annotator_name():
         return redirect(url_for("index"))
 
-    total = checklist_count()
+    total = task3_count()
     if total == 0:
-        return render_template("error.html", msg="Checklist index not built yet. Run build_index.py first.")
+        return render_template("error.html", msg="No Task-3 prompts available. Check the checklist data.")
 
     idx = max(0, min(idx, total - 1))
-    record = fetch_checklist_record(idx)
-    if not record:
-        return render_template("error.html", msg=f"Could not fetch checklist record {idx}.")
+    prompt_rec   = _task3_prompts[idx]
+    prompt_index = prompt_rec["prompt_index"]
+    prompt_text  = prompt_rec["prompt_text"]
+    # Admin sees original insertion order; annotators see deterministic shuffle
+    if is_admin():
+        profile_attrs = prompt_rec["attributes_orig"]
+    else:
+        profile_attrs = prompt_rec["attributes"]
 
-    user_id       = record.get("user_id", "")
-    prompt_text   = record.get("prompt_text", "")
-    profile_attrs = record.get("profile_attributes", [])
-    prompt_index  = record.get("prompt_index", -1)
-
-    # Strip embeddings
-    for a in profile_attrs:
-        a.pop("embedding", None)
-
-    # Load existing annotation
-    existing = load_existing_annotations("3").get(str(idx))
+    # Load existing annotation — records are keyed by sample_index (per-user).
+    # Merge judgments across all sample records for this prompt into one view.
+    all_existing = load_existing_annotations("3")
+    merged_relevant: Dict[str, Any] = {}
+    existing_note    = ""
+    existing_flagged = False
+    any_existing     = False
+    for attr_entry in profile_attrs:
+        rec = all_existing.get(str(attr_entry["sample_index"]))
+        if rec:
+            any_existing = True
+            if rec.get("flagged"):
+                existing_flagged = True
+            if not existing_note and rec.get("note"):
+                existing_note = rec["note"]
+            for j in rec.get("relevance_judgments", []):
+                if j.get("attribute") == attr_entry["attribute"]:
+                    merged_relevant[attr_entry["attribute"]] = j.get("relevant")
+                    break
+    existing = {
+        "relevance_judgments": [
+            {"attribute": a["attribute"], "relevant": merged_relevant.get(a["attribute"])}
+            for a in profile_attrs
+        ],
+        "note":    existing_note,
+        "flagged": existing_flagged,
+    } if any_existing else None
 
     if existing and existing.get("flagged"):
         is_annotated = True
@@ -1049,15 +1152,18 @@ def task3_view(idx: int):
 
     task_done = count_annotated("3", total) >= total
 
-    # LLM relevance classifications: per-attr dict of model -> bool
-    # _relevance[sample_index][attribute][model] = True/False
-    attr_model_relevance: Dict[str, Dict[str, bool]] = _relevance.get(idx, {})
+    # Per-attribute model votes: look up via each attribute's own sample_index
+    # _relevance[sample_index][attribute_text][model] = bool
+    attr_model_relevance: Dict[str, Dict[str, bool]] = {
+        a["attribute"]: _relevance.get(a["sample_index"], {}).get(a["attribute"], {})
+        for a in profile_attrs
+    }
 
-    # Admin overlay: per-attribute list of {annotator, relevant} from all annotators
-    # Also load LLM classifications for admin analysis
+    # Admin overlay: per-attribute annotator votes + per-attribute agreement stats
+    # + global agreement across all data.
     admin_annots: Optional[List[List[Dict]]] = None
-    admin_agreement: Optional[List[Dict]] = None  # per-attr agreement stats
-    global_agreement: Optional[Dict] = None       # overall cross-rater stats
+    admin_agreement: Optional[List[Dict]] = None
+    global_agreement: Optional[Dict] = None
     if is_admin():
         from analyze_relevance_agreement import (
             load_model_votes as _load_mv,
@@ -1073,52 +1179,42 @@ def task3_view(idx: int):
         all_annots = load_all_annotators("3")
         admin_annots = []
         admin_agreement = []
-        for attr in profile_attrs:
-            attr_text = attr.get("attribute", "")
+        for attr_entry in profile_attrs:
+            attr_text = attr_entry["attribute"]
             per_attr: List[Dict] = []
             for ann, recs in all_annots.items():
-                rec = recs.get(str(idx))
+                rec = recs.get(str(attr_entry["sample_index"]))
                 if rec:
                     for j in rec.get("relevance_judgments", []):
                         if j.get("attribute") == attr_text:
                             per_attr.append({
                                 "annotator": ann,
                                 "relevant":  j.get("relevant"),
-                                "note":      j.get("note", ""),
                             })
                             break
             admin_annots.append(per_attr)
 
-            # Agreement analysis across annotators + models
-            model_votes = attr_model_relevance.get(attr_text, {})
-            human_votes = [p["relevant"] for p in per_attr if p["relevant"] is not None]
-            all_votes = list(model_votes.values()) + human_votes
-
-            n_yes = sum(1 for v in all_votes if v)
-            n_no  = sum(1 for v in all_votes if not v)
-            n_total = len(all_votes)
-            # Simple agreement: fraction of majority
-            if n_total == 0:
-                agreement_pct = None
-            else:
-                agreement_pct = round(100 * max(n_yes, n_no) / n_total)
-
+            model_votes  = attr_model_relevance.get(attr_text, {})
+            human_votes  = [p["relevant"] for p in per_attr if p["relevant"] is not None]
+            all_votes    = list(model_votes.values()) + human_votes
+            n_yes        = sum(1 for v in all_votes if v)
+            n_no         = len(all_votes) - n_yes
+            agreement_pct = round(100 * max(n_yes, n_no) / len(all_votes)) if all_votes else None
             admin_agreement.append({
-                "attr": attr_text,
-                "model_votes": model_votes,
-                "n_human_yes": sum(1 for v in human_votes if v),
-                "n_human_no":  sum(1 for v in human_votes if not v),
-                "n_model_yes": sum(1 for v in model_votes.values() if v),
-                "n_model_no":  sum(1 for v in model_votes.values() if not v),
+                "attr":         attr_text,
+                "model_votes":  model_votes,
+                "n_human_yes":  sum(1 for v in human_votes if v),
+                "n_human_no":   sum(1 for v in human_votes if not v),
+                "n_model_yes":  sum(1 for v in model_votes.values() if v),
+                "n_model_no":   sum(1 for v in model_votes.values() if not v),
                 "agreement_pct": agreement_pct,
-                "disagreement": n_total > 1 and n_yes > 0 and n_no > 0,
+                "disagreement": len(all_votes) > 1 and n_yes > 0 and n_no > 0,
             })
 
     return render_template(
         "task3.html",
         idx=idx,
         total=total,
-        user_id=user_id,
         prompt_text=prompt_text,
         prompt_index=prompt_index,
         profile_attrs=profile_attrs,
@@ -1140,41 +1236,98 @@ def task3_save(idx: int):
         return jsonify({"ok": False, "error": "Not logged in"}), 401
 
     data = request.get_json(force=True)
-    meta = fetch_checklist_record(idx) or {}
-    record = {
-        "task": "3",
-        "index": idx,
-        "user_id": meta.get("user_id", ""),
-        "prompt_index": meta.get("prompt_index", -1),
-        "relevance_judgments": data.get("relevance_judgments", []),
-        "note": data.get("note", ""),
-        "flagged": data.get("flagged", False),
+    prompt_rec    = _task3_prompts[idx] if idx < len(_task3_prompts) else {}
+    prompt_index  = prompt_rec.get("prompt_index", -1)
+    profile_attrs = prompt_rec.get("attributes", [])
+    flagged       = data.get("flagged", False)
+    note          = data.get("note", "")
+
+    # Build attribute-text → relevant lookup from submitted judgments
+    judgments_by_attr = {
+        j["attribute"]: j.get("relevant")
+        for j in data.get("relevance_judgments", [])
     }
-    save_annotation("3", record)
-    total = checklist_count()
+
+    # Group attributes by sample_index and save one record per user-prompt pair
+    # (same format as the old per-user task3 / convert_task2_to_task3 output)
+    sample_groups: Dict[int, Dict] = {}
+    for attr_entry in profile_attrs:
+        sidx = attr_entry["sample_index"]
+        if sidx not in sample_groups:
+            sample_groups[sidx] = {
+                "user_id":   attr_entry["user_id"],
+                "judgments": [],
+            }
+        sample_groups[sidx]["judgments"].append({
+            "attribute": attr_entry["attribute"],
+            "relevant":  judgments_by_attr.get(attr_entry["attribute"]),
+        })
+
+    for sidx, sg in sample_groups.items():
+        save_annotation("3", {
+            "task":                "3",
+            "index":               sidx,
+            "user_id":             sg["user_id"],
+            "prompt_index":        prompt_index,
+            "relevance_judgments": sg["judgments"],
+            "note":                note,
+            "flagged":             flagged,
+        })
+
+    total    = task3_count()
     all_done = total > 0 and count_annotated("3", total) >= total
     return jsonify({"ok": True, "all_done": all_done})
 
 
 @app.route("/task3/list")
 def task3_list():
-    """Return JSON list of checklist records for jump navigator."""
+    """Return JSON list of task-3 prompts for the jump navigator."""
     if not annotator_name():
         return jsonify([])
-    meta = get_checklist_meta_list()
     existing = load_existing_annotations("3")
-    for m in meta:
-        rec = existing.get(str(m["annotation_index"]))
-        if rec and rec.get("flagged"):
-            m["annotated"] = True
-        elif rec:
-            judgments = rec.get("relevance_judgments", [])
-            m["annotated"] = bool(judgments) and all(
-                j.get("relevant") is not None for j in judgments
-            )
+    result = []
+    for i, prompt_rec in enumerate(_task3_prompts[:task3_count()]):
+        attrs   = prompt_rec["attributes"]
+        n_attrs = len(attrs)
+        # Check by sample_index (per-user records)
+        flagged = any(
+            existing.get(str(a["sample_index"]), {}).get("flagged") for a in attrs
+        )
+        if flagged:
+            annotated = True
         else:
-            m["annotated"] = False
-    return jsonify(meta)
+            annotated = bool(attrs) and all(
+                any(
+                    j.get("attribute") == a["attribute"] and j.get("relevant") is not None
+                    for j in existing.get(str(a["sample_index"]), {}).get("relevance_judgments", [])
+                )
+                for a in attrs
+            )
+        result.append({
+            "annotation_index": i,
+            "prompt_index":     prompt_rec["prompt_index"],
+            "prompt_snippet":   prompt_rec["prompt_text"][:120],
+            "n_attrs":          n_attrs,
+            "annotated":        annotated,
+        })
+    return jsonify(result)
+
+
+@app.route("/task3/complete")
+def task3_complete():
+    if not annotator_name():
+        return redirect(url_for("index"))
+    prolific_code = app.config.get("PROLIFIC_CODE_TASK3", "")
+    prolific_url  = (
+        f"https://app.prolific.com/submissions/complete?cc={prolific_code}"
+        if prolific_code else ""
+    )
+    return render_template(
+        "complete.html",
+        prolific_url=prolific_url,
+        prolific_code=prolific_code,
+        annotator=annotator_name(),
+    )
 
 
 # ─── Completion route ─────────────────────────────────────────────────────────
@@ -1228,7 +1381,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task1-max-users",
         type=int,
-        default=5,
+        default=100,
         help="Max number of users shown in Task 1 (default: 100).",
     )
     parser.add_argument(
@@ -1247,14 +1400,27 @@ if __name__ == "__main__":
         default="C8LTQ4U9",
         help="Prolific completion code displayed on the done page.",
     )
+    parser.add_argument(
+        "--task3-max-prompts",
+        type=int,
+        default=5,
+        help="Max number of prompts shown in Task 3 (default: 5).",
+    )
+    parser.add_argument(
+        "--prolific-code-task3",
+        default="",
+        help="Prolific completion code for Task 3.",
+    )
     args = parser.parse_args()
 
     # Apply workload limits (override module-level defaults)
     TASK1_MAX_USERS = args.task1_max_users
     TASK2_MAX_ITEMS = args.task2_max_items
+    TASK3_MAX_PROMPTS = args.task3_max_prompts
 
     app.config["ANNOTATOR_MODE"] = (args.mode == "annotator")
     app.config["SHOW_OPTION_DETAIL"] = args.show_option_detail
     app.config["PROLIFIC_COMPLETION_URL"] = args.prolific_completion_url
     app.config["PROLIFIC_CODE"] = args.prolific_code
+    app.config["PROLIFIC_CODE_TASK3"] = args.prolific_code_task3
     app.run(host=args.host, port=args.port, debug=args.debug)
