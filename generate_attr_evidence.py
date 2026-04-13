@@ -30,10 +30,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-BASE_DIR   = Path(__file__).parent
-ATTRS_FILE = BASE_DIR / "data" / "extracted" / "attrs.jsonl"
-CONVS_FILE = BASE_DIR / "data" / "extracted" / "convs.jsonl"
-CACHE_FILE = BASE_DIR / "data" / "attr_evidence_cache.jsonl"
+BASE_DIR    = Path(__file__).parent
+TASK1_FILE  = BASE_DIR / "data" / "extracted" / "task1_items.jsonl"
+CACHE_FILE  = BASE_DIR / "data" / "attr_evidence_cache.jsonl"
 
 # One prompt per attribute: give full conv context + single attribute + reason.
 # Ask for conv_idx and turn_idxs only.
@@ -68,9 +67,9 @@ Find the turn(s) whose content best matches this attribute and the above reason.
 
 # ─── Data helpers ─────────────────────────────────────────────────────────────
 
-def load_attrs(max_users: int) -> List[Dict]:
+def load_task1_items(max_users: int) -> List[Dict]:
     records = []
-    with open(ATTRS_FILE, "r", encoding="utf-8") as f:
+    with open(TASK1_FILE, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -81,29 +80,13 @@ def load_attrs(max_users: int) -> List[Dict]:
             records.append(rec)
             if len(records) >= max_users:
                 break
-    records.sort(key=lambda r: r.get("line_index", 0))
+    records.sort(key=lambda r: r.get("item_index", 0))
     return records
 
 
-def build_convs_map(user_ids: set) -> Dict[str, List[Any]]:
-    result: Dict[str, List[Any]] = {}
-    with open(CONVS_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-                uid = rec.get("hashed_ip", "")
-                if uid not in user_ids:
-                    continue
-                convs = rec.get("conversation", [])
-                if isinstance(convs, list) and convs and isinstance(convs[0], dict):
-                    convs = [convs]
-                result[uid] = convs
-            except Exception:
-                continue
-    return result
+def extract_convs(record: Dict) -> List[Any]:
+    """Extract conversations as a list of turn-lists from a task1 item."""
+    return [cr["conversation"] for cr in record.get("conversations", []) if cr.get("conversation")]
 
 
 def build_conv_context(convs: List[Any], max_chars: int = 80000, c_idx_start: int = 0) -> str:
@@ -224,7 +207,11 @@ def parse_single(output: str, debug: bool = False) -> Dict:
 
 # ─── Cache ────────────────────────────────────────────────────────────────────
 
-def load_cached_indexes() -> set:
+def cache_key(rec: Dict) -> str:
+    return f"{rec.get('source', 'unknown')}:{rec.get('user_id', '')}"
+
+
+def load_cached_keys() -> set:
     done: set = set()
     if not CACHE_FILE.exists():
         return done
@@ -235,9 +222,9 @@ def load_cached_indexes() -> set:
                 continue
             try:
                 rec = json.loads(line)
-                idx = rec.get("line_index")
-                if idx is not None:
-                    done.add(idx)
+                key = rec.get("cache_key")
+                if key:
+                    done.add(key)
             except Exception:
                 continue
     return done
@@ -257,21 +244,16 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
-    for path in [ATTRS_FILE, CONVS_FILE]:
-        if not path.exists():
-            print(f"ERROR: {path} not found.", file=sys.stderr)
-            sys.exit(1)
+    if not TASK1_FILE.exists():
+        print(f"ERROR: {TASK1_FILE} not found. Run: python3 build_index.py", file=sys.stderr)
+        sys.exit(1)
 
-    print(f"Loading attrs for first {args.max_users} users...", flush=True)
-    attrs_records = load_attrs(args.max_users)
+    print(f"Loading task1 items (first {args.max_users})...", flush=True)
+    task1_records = load_task1_items(args.max_users)
+    print(f"  Loaded {len(task1_records)} records.", flush=True)
 
-    user_ids = {r["user_id"] for r in attrs_records}
-    print("Loading conversations...", flush=True)
-    convs_map = build_convs_map(user_ids)
-    print(f"  Found for {len(convs_map)}/{len(user_ids)} users.", flush=True)
-
-    already_done = set() if args.force else load_cached_indexes()
-    todo = [r for r in attrs_records if r.get("line_index") not in already_done]
+    already_done = set() if args.force else load_cached_keys()
+    todo = [r for r in task1_records if cache_key(r) not in already_done]
     print(f"  {len(already_done)} cached, {len(todo)} users to generate.", flush=True)
 
     if not todo:
@@ -302,7 +284,7 @@ def main() -> None:
     empty_conv_users = 0
     for rec in todo:
         attrs  = rec.get("merged_attributes", [])
-        convs  = convs_map.get(rec["user_id"], [])
+        convs  = extract_convs(rec)
         chunks = get_conv_context_chunks(convs, tokenizer, max_ctx_tokens)
         if not any(ctx.strip() for _, ctx in chunks):
             empty_conv_users += 1
@@ -325,7 +307,7 @@ def main() -> None:
                     add_generation_prompt=True,
                 )
                 prompts.append(chat_prompt)
-                meta.append((rec.get("line_index", 0), rec["user_id"], a_idx, len(attrs), c_idx_offset))
+                meta.append((cache_key(rec), rec["user_id"], rec.get("source", "unknown"), a_idx, len(attrs), c_idx_offset))
 
     total_prompts = len(prompts)
     print(f"  {total_prompts} prompts for {len(todo)} users.", flush=True)
@@ -338,14 +320,14 @@ def main() -> None:
     # user_evidence[line_index] = list of size n_attrs, filled by attr_idx
     # When a user has multiple chunks, each chunk produces a result; we keep the first
     # non-null result (in chunk order) for each attribute.
-    user_evidence: Dict[int, List[Optional[Dict]]] = {}
-    user_id_map:   Dict[int, str] = {}
+    user_evidence: Dict[str, List[Optional[Dict]]] = {}
+    user_meta_map: Dict[str, Dict] = {}  # cache_key -> {user_id, source}
 
     debug_shown = 0
-    for gen, (line_index, user_id, a_idx, n_attrs, c_idx_offset) in zip(generations, meta):
-        if line_index not in user_evidence:
-            user_evidence[line_index] = [{"conv_idx": None, "turn_idxs": []}] * n_attrs
-            user_id_map[line_index] = user_id
+    for gen, (ck, user_id, source, a_idx, n_attrs, c_idx_offset) in zip(generations, meta):
+        if ck not in user_evidence:
+            user_evidence[ck] = [{"conv_idx": None, "turn_idxs": []}] * n_attrs
+            user_meta_map[ck] = {"user_id": user_id, "source": source}
         output = gen.outputs[0].text if gen.outputs else ""
         # Print first 3 raw outputs so we can see what the model is generating
         if debug_shown < 3:
@@ -356,17 +338,19 @@ def main() -> None:
         if result["conv_idx"] is not None:
             result = {"conv_idx": result["conv_idx"] + c_idx_offset, "turn_idxs": result["turn_idxs"]}
         # Only overwrite if we don't yet have a non-null result for this attr
-        if user_evidence[line_index][a_idx]["conv_idx"] is None:
-            user_evidence[line_index][a_idx] = result
+        if user_evidence[ck][a_idx]["conv_idx"] is None:
+            user_evidence[ck][a_idx] = result
 
     # ── Write cache ────────────────────────────────────────────────────────────
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CACHE_FILE, "a", encoding="utf-8") as cache_out:
-        for line_index, evidence in user_evidence.items():
+        for ck, evidence in user_evidence.items():
+            m = user_meta_map[ck]
             cache_out.write(json.dumps({
-                "line_index": line_index,
-                "user_id":    user_id_map[line_index],
-                "evidence":   evidence,
+                "cache_key": ck,
+                "user_id":   m["user_id"],
+                "source":    m["source"],
+                "evidence":  evidence,
             }, ensure_ascii=False) + "\n")
 
     print(f"\nDone. {len(user_evidence)} users written, {len(already_done)} skipped.", flush=True)
