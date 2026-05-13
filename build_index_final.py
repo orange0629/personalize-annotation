@@ -44,12 +44,12 @@ ATTRS_INDEX_DB     = DATA_DIR / "attrs_index.db"
 CONVS_INDEX_DB     = DATA_DIR / "convs_index.db"
 
 PROMPT_MIN           = 0
-PROMPT_MAX           = 52   # inclusive — first 100 prompts are indices 0-100
-TASK4_WILDCHAT_N     = 40    # wildchat users in task4
+PROMPT_MAX           = 42   # inclusive — first 100 prompts are indices 0-100
+TASK4_WILDCHAT_N     = 50    # wildchat users in task4
 TASK4_EXTRA_N        = 10    # users per extra source (10 cupid + 10 prefeval = 20)
 MIN_PROMPTS_PER_USER = 2
 MAX_PROMPTS_PER_USER = 5
-MIN_USERS_PER_PROMPT = 3
+MIN_USERS_PER_PROMPT = 2
 MAX_USERS_PER_PROMPT = 4
 MIN_ITEMS            = 2
 SAMPLE_SEED          = 42
