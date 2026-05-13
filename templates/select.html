@@ -115,8 +115,78 @@
     </div>
   </div>
 
+  <!-- Task 4 (Round 2 of Task 1) -->
+  <div class="card" style="margin-bottom:16px; border-color:#a5b4fc;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
+          Task 4 — User Attribute Annotation <span style="font-size:11px; color:#6366f1; font-weight:500;">(Round 2)</span>
+        </h3>
+        <p style="font-size:13px; color:#555; line-height:1.6; margin-bottom:12px;">
+          For each user, review their conversation history and list of inferred attributes.
+          Determine which attributes make sense and which are missing or incorrect.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          {% if t4_ready %}
+            <span class="badge badge-green">✓ Data ready</span>
+          {% else %}
+            <span class="badge badge-yellow">⚠ Data not found</span>
+          {% endif %}
+          <span class="badge badge-gray">{{ t4_count }} users</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
+        {% if t4_ready %}
+          <a href="{{ url_for('task4_redirect') }}" class="btn btn-primary" style="justify-content:center;">
+            Start Task 4 →
+          </a>
+        {% else %}
+          <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
+            Data required
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Task 5 (Round 2 of Task 3) -->
+  <div class="card" style="border-color:#a5b4fc;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
+          Task 5 — Attribute Relevance Classification <span style="font-size:11px; color:#6366f1; font-weight:500;">(Round 2)</span>
+        </h3>
+        <p style="font-size:13px; color:#555; line-height:1.6; margin-bottom:12px;">
+          For each user–prompt pair, decide for every profile attribute whether it
+          should be taken into account when personalizing the AI's response.
+          Answer <strong>YES</strong> if the attribute would influence the response
+          in any way; <strong>NO</strong> if it has no effect whatsoever.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          {% if t5_ready %}
+            <span class="badge badge-green">✓ Data ready</span>
+          {% else %}
+            <span class="badge badge-yellow">⚠ Data not found</span>
+          {% endif %}
+          <span class="badge badge-gray">{{ t5_count }} pairs</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
+        {% if t5_ready %}
+          <a href="{{ url_for('task5_redirect') }}" class="btn btn-primary" style="justify-content:center;">
+            Start Task 5 →
+          </a>
+        {% else %}
+          <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
+            Data required
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
   {% if not t1_ready or not t2_ready %}
-  <div class="card" style="background:#fffbeb; border:1px solid #fcd34d;">
+  <div class="card" style="background:#fffbeb; border:1px solid #fcd34d; margin-top:16px;">
     <p style="font-size:13px; color:#78350f; line-height:1.6;">
       <strong>⚠ Some indexes are not built.</strong><br>
       Run <code>python3 build_index.py</code> in the <code>annotation_tool/</code> directory

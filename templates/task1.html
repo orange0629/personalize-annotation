@@ -150,6 +150,17 @@ div.msg-details.turn-highlight > .msg {
   .msg-text { font-size: 11px; }
 }
 
+/* ── Admin summary panel ────────────────────────────────────────── */
+.summary-card {
+  border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px;
+  margin-bottom: 14px; background: #f8fafc;
+}
+.summary-card h4 { font-size: 13px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.summary-stat { background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; font-size: 12px; }
+.summary-stat .stat-val { font-size: 20px; font-weight: 800; color: #1e293b; }
+.summary-stat .stat-label { color: #6b7280; margin-top: 1px; }
+
 /* ── Admin overlay ──────────────────────────────────────────────── */
 .admin-overlay {
   margin-top: 7px; padding: 6px 8px;
@@ -247,6 +258,9 @@ div.msg-details.turn-highlight > .msg {
   <div class="card" style="padding:10px 16px; margin-top:8px;">
     <span style="font-weight:600; font-size:13px;">User {{ idx + 1 }}</span>
     <span class="badge badge-blue" style="margin-left:4px;">{{ merged_attrs|length }} attributes</span>
+    {% if is_admin %}
+      <span class="badge" style="background:#fce7f3; color:#9d174d; margin-left:4px;">Admin view</span>
+    {% endif %}
   </div>
 
   <div class="two-col-sticky" style="margin-top:12px;">
@@ -274,6 +288,106 @@ div.msg-details.turn-highlight > .msg {
     <!-- Right: Attributes + Annotation -->
     <div>
       <div class="col-title">Inferred Attributes</div>
+
+      {% if is_admin and admin_agreement %}
+      <!-- ── Admin summary panel ── -->
+      <div class="summary-card">
+
+        <!-- This-item stats -->
+        <h4 style="margin-bottom:6px;">This item</h4>
+        {% set ns = namespace(n_agree=0, n_disagree=0, n_covered=0) %}
+        {% for ag in admin_agreement %}
+          {% if ag.n_annotators > 0 %}
+            {% set ns.n_covered = ns.n_covered + 1 %}
+            {% if ag.disagreement %}
+              {% set ns.n_disagree = ns.n_disagree + 1 %}
+            {% else %}
+              {% set ns.n_agree = ns.n_agree + 1 %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        <div class="summary-grid" style="margin-bottom:10px;">
+          <div class="summary-stat">
+            <div class="stat-val">{{ merged_attrs|length }}</div>
+            <div class="stat-label">Attributes</div>
+          </div>
+          <div class="summary-stat">
+            <div class="stat-val" style="color:#166534;">{{ ns.n_agree }}</div>
+            <div class="stat-label">Full agreement</div>
+          </div>
+          <div class="summary-stat">
+            <div class="stat-val" style="color:#b45309;">{{ ns.n_disagree }}</div>
+            <div class="stat-label">Disagreements</div>
+          </div>
+          <div class="summary-stat">
+            <div class="stat-val" style="color:#6b7280;">{{ merged_attrs|length - ns.n_covered }}</div>
+            <div class="stat-label">Not yet judged</div>
+          </div>
+        </div>
+
+        {% if global_stats %}
+
+        <!-- Label rates per annotator -->
+        <h4 style="margin-top:10px; margin-bottom:6px; border-top:1px solid #e5e7eb; padding-top:10px;">
+          Global label rates — {{ global_stats.n_items_annotated }} / {{ global_stats.n_items_total }} items annotated
+        </h4>
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#9ca3af; margin-bottom:4px;">Per-annotator breakdown</div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:10px;">
+          <thead>
+            <tr style="color:#6b7280; font-weight:600; font-size:10px;">
+              <th style="text-align:left; padding:2px 4px;">Annotator</th>
+              <th style="text-align:right; padding:2px 4px; color:#166534;">✓ ok%</th>
+              <th style="text-align:right; padding:2px 4px; color:#854d0e;">? unsure%</th>
+              <th style="text-align:right; padding:2px 4px; color:#991b1b;">✗ bad%</th>
+              <th style="text-align:right; padding:2px 4px;">N</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in global_stats.label_rates %}
+            <tr style="border-top:1px solid #f3f4f6;">
+              <td style="padding:2px 4px; font-family:monospace; font-size:10px;">{{ r.annotator | truncate(22, true, '…') }}</td>
+              <td style="text-align:right; padding:2px 4px; font-weight:600; color:#166534;">{{ "%.1f"|format(r.ok_pct*100) }}%</td>
+              <td style="text-align:right; padding:2px 4px; color:#854d0e;">{{ "%.1f"|format(r.unsure_pct*100) }}%</td>
+              <td style="text-align:right; padding:2px 4px; color:#991b1b;">{{ "%.1f"|format(r.bad_pct*100) }}%</td>
+              <td style="text-align:right; padding:2px 4px; color:#9ca3af;">{{ r.n }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Pairwise agreement + kappa -->
+        <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:#9ca3af; margin-bottom:4px;">Pairwise agreement (Human × Human)</div>
+        <table style="width:100%; border-collapse:collapse; font-size:11px; margin-bottom:4px;">
+          <thead>
+            <tr style="color:#9ca3af; font-size:10px;">
+              <th style="text-align:left; padding:1px 4px;">A</th>
+              <th style="text-align:left; padding:1px 4px;">B</th>
+              <th style="text-align:right; padding:1px 4px;">Agree</th>
+              <th style="text-align:right; padding:1px 4px;">κ</th>
+              <th style="text-align:right; padding:1px 4px;">N</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in global_stats.pairwise %}
+            <tr style="border-top:1px solid #f3f4f6;">
+              <td style="padding:2px 4px; font-family:monospace; font-size:10px;">{{ r.ann_a | truncate(20, true, '…') }}</td>
+              <td style="padding:2px 4px; font-family:monospace; font-size:10px;">{{ r.ann_b | truncate(20, true, '…') }}</td>
+              <td style="text-align:right; padding:2px 4px; font-weight:600;
+                color:{{ '#166534' if r.agree_pct >= 0.70 else ('#b45309' if r.agree_pct < 0.60 else '#374151') }};">
+                {{ "%.1f"|format(r.agree_pct*100) }}%
+              </td>
+              <td style="text-align:right; padding:2px 4px; color:#6b7280;">
+                {% if r.kappa is not none %}{{ "%.3f"|format(r.kappa) }}{% else %}—{% endif %}
+              </td>
+              <td style="text-align:right; padding:2px 4px; color:#9ca3af;">{{ r.n }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {% endif %}{# global_stats #}
+      </div>
+      {% endif %}{# is_admin #}
 
       <div id="attrList">
         {% for attr in merged_attrs %}

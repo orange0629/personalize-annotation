@@ -1,2 +1,10 @@
 data/extracted
 data/annotations
+
+__pycache__
+
+*.err
+*.out
+*.log
+*.sh
+data/checklist*

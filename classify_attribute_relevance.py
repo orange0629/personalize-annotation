@@ -20,7 +20,8 @@ Re-running is safe — already-cached sample_indexes are skipped unless --force.
 Output line format:
   {
     "model": "gpt-4o",
-    "sample_index": N,
+    "sample_index": N,       # 0-based line index in task2_items.jsonl
+    "prompt_index": N,
     "user_id": "...",
     "items": [
       {
@@ -54,9 +55,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-BASE_DIR       = Path(__file__).parent
-CHECKLIST_FILE = BASE_DIR / "data" / "extracted" / "checklist_sample.jsonl"
-RELEVANCE_DIR  = BASE_DIR / "data" / "relevance"
+BASE_DIR      = Path(__file__).parent
+TASK2_FILE    = BASE_DIR / "data" / "extracted" / "task2_items.jsonl"
+RELEVANCE_DIR = BASE_DIR / "data" / "relevance"
 
 # ─── Prompt template ──────────────────────────────────────────────────────────
 
@@ -84,23 +85,23 @@ def build_prompt(attribute: str, prompt_text: str) -> str:
 
 # ─── Data helpers ──────────────────────────────────────────────────────────────
 
-def load_checklist(max_samples: int, start_index: int = 0, end_index: Optional[int] = None) -> List[Dict]:
+def load_task2_items(max_samples: int, start_index: int = 0, end_index: Optional[int] = None) -> List[Dict]:
+    """Load records from task2_items.jsonl, using line position as sample_index."""
     records = []
-    with open(CHECKLIST_FILE, "r", encoding="utf-8") as f:
-        for line in f:
+    with open(TASK2_FILE, "r", encoding="utf-8") as f:
+        for line_idx, line in enumerate(f):
             line = line.strip()
             if not line:
                 continue
+            if line_idx < start_index:
+                continue
+            if end_index is not None and line_idx >= end_index:
+                break
             rec = json.loads(line)
-            sidx = rec.get("sample_index", 0)
-            if sidx < start_index:
-                continue
-            if end_index is not None and sidx >= end_index:
-                continue
+            rec["sample_index"] = line_idx
             records.append(rec)
             if len(records) >= max_samples:
                 break
-    records.sort(key=lambda r: r.get("sample_index", 0))
     return records
 
 
@@ -214,7 +215,7 @@ def run_vllm(
     sampling = SamplingParams(temperature=temperature, max_tokens=max_new_tokens)
 
     prompts: List[str] = []
-    meta: List[Tuple[int, int]] = []  # (sample_index, item_index)
+    meta: List[Tuple[int, int]] = []  # (sample_index, attr_index)
 
     for rec in records:
         sidx = rec["sample_index"]
@@ -235,9 +236,11 @@ def run_vllm(
 
     sample_items: Dict[int, Dict[int, Dict]] = {}
     sample_uid: Dict[int, str] = {}
+    sample_pidx: Dict[int, int] = {}
     for rec in records:
         sidx = rec["sample_index"]
         sample_uid[sidx] = rec.get("user_id", "")
+        sample_pidx[sidx] = rec.get("prompt_index", -1)
         sample_items[sidx] = {
             iidx: {"attribute": item.get("attribute", ""), "relevant": False, "raw_answer": "", "full_output": ""}
             for iidx, item in enumerate(rec.get("profile_attributes", []))
@@ -258,6 +261,7 @@ def run_vllm(
         {
             "model": model,
             "sample_index": sidx,
+            "prompt_index": sample_pidx[sidx],
             "user_id": sample_uid[sidx],
             "items": [sample_items[sidx][i] for i in sorted(sample_items[sidx])],
         }
@@ -372,6 +376,7 @@ def _run_api(records: List[Dict], model: str, call_fn) -> List[Dict]:
         results.append({
             "model": model,
             "sample_index": sidx,
+            "prompt_index": rec.get("prompt_index", -1),
             "user_id": rec.get("user_id", ""),
             "items": items_out,
         })
@@ -467,29 +472,29 @@ def main() -> None:
                         help="Max tokens to generate. Keep high to allow reasoning before the answer.")
     parser.add_argument("--max-samples", type=int, default=10000)
     parser.add_argument("--start-index", type=int, default=0,
-                        help="First sample_index to process (inclusive).")
+                        help="First line index in task2_items.jsonl to process (inclusive).")
     parser.add_argument("--end-index", type=int, default=None,
-                        help="Last sample_index to process (exclusive).")
+                        help="Last line index in task2_items.jsonl to process (exclusive).")
     parser.add_argument("--region", default="us-east-1",
                         help="(bedrock only) AWS region, e.g. us-east-1, us-west-2.")
     parser.add_argument("--force", action="store_true",
                         help="Ignore cache and regenerate all samples.")
     args = parser.parse_args()
 
-    if not CHECKLIST_FILE.exists():
-        print(f"ERROR: {CHECKLIST_FILE} not found.", file=sys.stderr)
+    if not TASK2_FILE.exists():
+        print(f"ERROR: {TASK2_FILE} not found. Run: python3 build_index.py", file=sys.stderr)
         sys.exit(1)
 
     RELEVANCE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = RELEVANCE_DIR / f"{model_tag(args.model)}.jsonl"
 
     range_desc = f"[{args.start_index}, {args.end_index if args.end_index is not None else '∞'})"
-    print(f"Loading checklist (max {args.max_samples} samples, index range {range_desc})...", flush=True)
-    all_records = load_checklist(args.max_samples, start_index=args.start_index, end_index=args.end_index)
+    print(f"Loading task2 items (max {args.max_samples} samples, index range {range_desc})...", flush=True)
+    all_records = load_task2_items(args.max_samples, start_index=args.start_index, end_index=args.end_index)
     print(f"  Loaded {len(all_records)} samples.", flush=True)
 
     already_done = set() if args.force else load_cached_indexes(cache_file)
-    todo = [r for r in all_records if r.get("sample_index") not in already_done]
+    todo = [r for r in all_records if r["sample_index"] not in already_done]
     print(f"  {len(already_done)} cached, {len(todo)} to generate → {cache_file.name}", flush=True)
 
     if not todo:

@@ -513,6 +513,18 @@
 
 {% block extra_js %}
 <script>
+// Dynamically align sticky-col below the sticky-nav regardless of instruction height
+function adjustStickyCol() {
+  const nav = document.querySelector('.sticky-nav');
+  const col = document.querySelector('.sticky-col');
+  if (!nav || !col) return;
+  const offset = 44 + nav.offsetHeight + 4; // 44px = nav's own top offset
+  col.style.top = offset + 'px';
+  col.style.maxHeight = `calc(100vh - ${offset + 16}px)`;
+}
+document.addEventListener('DOMContentLoaded', adjustStickyCol);
+window.addEventListener('resize', adjustStickyCol);
+
 const profileAttrs = {{ profile_attrs | tojson }};
 // currentRelevant[i] = true | false | null
 const currentRelevant = profileAttrs.map(() => null);

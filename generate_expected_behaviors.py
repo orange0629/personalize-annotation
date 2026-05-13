@@ -49,9 +49,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-BASE_DIR        = Path(__file__).parent
-CHECKLIST_FILE  = BASE_DIR / "data" / "extracted" / "checklist_sample.jsonl"
-BEHAVIORS_DIR   = BASE_DIR / "data" / "behaviors"
+BASE_DIR      = Path(__file__).parent
+TASK2_FILE    = BASE_DIR / "data" / "extracted" / "task2_items.jsonl"
+BEHAVIORS_DIR = BASE_DIR / "data" / "behaviors"
 
 # ─── Prompt templates ─────────────────────────────────────────────────────────
 
@@ -94,24 +94,23 @@ def build_prompts(attribute: str, prompt_text: str) -> Tuple[str, str]:
 
 # ─── Data helpers ──────────────────────────────────────────────────────────────
 
-def load_checklist(max_samples: int, start_index: int = 0, end_index: Optional[int] = None) -> List[Dict]:
-    """Load checklist records with optional sample_index range [start_index, end_index)."""
+def load_task2_items(max_samples: int, start_index: int = 0, end_index: Optional[int] = None) -> List[Dict]:
+    """Load records from task2_items.jsonl, using line position as sample_index."""
     records = []
-    with open(CHECKLIST_FILE, "r", encoding="utf-8") as f:
-        for line in f:
+    with open(TASK2_FILE, "r", encoding="utf-8") as f:
+        for line_idx, line in enumerate(f):
             line = line.strip()
             if not line:
                 continue
+            if line_idx < start_index:
+                continue
+            if end_index is not None and line_idx >= end_index:
+                break
             rec = json.loads(line)
-            sidx = rec.get("sample_index", 0)
-            if sidx < start_index:
-                continue
-            if end_index is not None and sidx >= end_index:
-                continue
+            rec["sample_index"] = line_idx
             records.append(rec)
             if len(records) >= max_samples:
                 break
-    records.sort(key=lambda r: r.get("sample_index", 0))
     return records
 
 
@@ -205,9 +204,11 @@ def run_vllm(
     # Assemble
     sample_items: Dict[int, Dict[int, Dict]] = {}
     sample_uid: Dict[int, str] = {}
+    sample_pidx: Dict[int, int] = {}
     for rec in records:
         sidx = rec["sample_index"]
         sample_uid[sidx] = rec.get("user_id", "")
+        sample_pidx[sidx] = rec.get("prompt_index", -1)
         sample_items[sidx] = {
             iidx: {"attribute": item.get("attribute", ""), "explicit_behavior": "", "implicit_behavior": ""}
             for iidx, item in enumerate(rec.get("profile_attributes", []))
@@ -225,6 +226,7 @@ def run_vllm(
         {
             "model": model,
             "sample_index": sidx,
+            "prompt_index": sample_pidx[sidx],
             "user_id": sample_uid[sidx],
             "items": [sample_items[sidx][i] for i in sorted(sample_items[sidx])],
         }
@@ -338,6 +340,7 @@ def _run_api(records: List[Dict], model: str, call_fn) -> List[Dict]:
         results.append({
             "model": model,
             "sample_index": sidx,
+            "prompt_index": rec.get("prompt_index", -1),
             "user_id": rec.get("user_id", ""),
             "items": items_out,
         })
@@ -440,16 +443,16 @@ def main() -> None:
                         help="Ignore cache and regenerate all samples.")
     args = parser.parse_args()
 
-    if not CHECKLIST_FILE.exists():
-        print(f"ERROR: {CHECKLIST_FILE} not found.", file=sys.stderr)
+    if not TASK2_FILE.exists():
+        print(f"ERROR: {TASK2_FILE} not found. Run: python3 build_index.py", file=sys.stderr)
         sys.exit(1)
 
     BEHAVIORS_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = BEHAVIORS_DIR / f"{model_tag(args.model)}.jsonl"
 
     range_desc = f"[{args.start_index}, {args.end_index if args.end_index is not None else '∞'})"
-    print(f"Loading checklist (max {args.max_samples} samples, index range {range_desc})...", flush=True)
-    all_records = load_checklist(args.max_samples, start_index=args.start_index, end_index=args.end_index)
+    print(f"Loading task2 items (max {args.max_samples} samples, index range {range_desc})...", flush=True)
+    all_records = load_task2_items(args.max_samples, start_index=args.start_index, end_index=args.end_index)
     print(f"  Loaded {len(all_records)} samples.", flush=True)
 
     already_done = set() if args.force else load_cached_indexes(cache_file)
