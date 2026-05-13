@@ -47,7 +47,8 @@ PROMPT_MIN           = 0
 PROMPT_MAX           = 52   # inclusive — first 100 prompts are indices 0-100
 TASK4_WILDCHAT_N     = 50    # wildchat users in task4
 TASK4_EXTRA_N        = 10    # users per extra source (10 cupid + 10 prefeval = 20)
-MAX_PROMPTS_PER_USER = 4
+MIN_PROMPTS_PER_USER = 2
+MAX_PROMPTS_PER_USER = 6
 MIN_USERS_PER_PROMPT = 3
 MAX_USERS_PER_PROMPT = 5
 MIN_ITEMS            = 2
@@ -267,7 +268,15 @@ def build_task4_task5_items(
     user_prompts: dict[str, list] = defaultdict(list)
     for user_id, prompt_idx, ann_idx, offset in valid_pairs:
         user_prompts[user_id].append((prompt_idx, ann_idx, offset))
-    _progress(f"  {len(valid_pairs)} valid pairs across {len(user_prompts)} users.")
+
+    # Drop users who can't meet the minimum-prompts-per-user requirement.
+    # Must happen before attrs scanning so those users never enter the eligible pool.
+    user_prompts = {uid: pairs for uid, pairs in user_prompts.items()
+                    if len(pairs) >= MIN_PROMPTS_PER_USER}
+    _progress(
+        f"  {len(valid_pairs)} valid pairs; {len(user_prompts)} users "
+        f"with >= {MIN_PROMPTS_PER_USER} valid prompts."
+    )
 
     # ── Assign prompts to fixed wildchat users first (updates caps for new sampling) ──
     rng = random.Random(SAMPLE_SEED)
@@ -318,29 +327,65 @@ def build_task4_task5_items(
         f"(out of {len(user_prompts)} checklist users with valid pairs)."
     )
 
-    # ── Sample new wildchat users for task4 ───────────────────────────────────
-    candidate_users = sorted(u for u in user_prompts if u in eligible_user_ids)
-    rng.shuffle(candidate_users)
+    # ── Sample new wildchat users for task4 (prompt-centric, MIN–MAX users/prompt) ─
+    # Build prompt -> eligible fresh users mapping.
+    prompt_eligible: dict[int, list] = defaultdict(list)  # prompt_idx -> [(uid, ann_idx, offset)]
+    for user_id, prompt_idx, ann_idx, offset in valid_pairs:
+        if user_id in eligible_user_ids and user_id not in fixed_user_ids:
+            prompt_eligible[prompt_idx].append((user_id, ann_idx, offset))
 
+    # Only consider prompts not already at capacity and with enough fresh users.
+    viable_prompts = [
+        p for p, users in prompt_eligible.items()
+        if len(users) >= MIN_USERS_PER_PROMPT and prompt_user_count[p] < MAX_USERS_PER_PROMPT
+    ]
+    rng.shuffle(viable_prompts)
+
+    assigned_users: set[str] = set()
     task4_wildchat: list[tuple] = []  # (user_id, prompt_idx, ann_idx, offset)
 
-    for user_id in candidate_users:
-        if len(task4_wildchat) >= wildchat_to_sample:
+    for prompt_idx in viable_prompts:
+        need = wildchat_to_sample - len(assigned_users)
+        if need <= 0:
             break
-        if user_id in fixed_user_ids:
-            continue
-        available = [
-            (p, a, o) for p, a, o in user_prompts[user_id]
-            if prompt_user_count[p] < MAX_USERS_PER_PROMPT
-        ]
-        if not available:
-            continue
-        rng.shuffle(available)
-        chosen = available[0]
-        task4_wildchat.append((user_id,) + chosen)
-        prompt_user_count[chosen[0]] += 1
 
-    _progress(f"  {len(task4_wildchat)} new wildchat users selected for task4 (target {wildchat_to_sample}).")
+        fresh = [
+            (uid, a, o) for uid, a, o in prompt_eligible[prompt_idx]
+            if uid not in assigned_users
+        ]
+        if len(fresh) < MIN_USERS_PER_PROMPT:
+            continue
+
+        # How many users to assign to this prompt?
+        cap = MAX_USERS_PER_PROMPT - prompt_user_count[prompt_idx]
+        take = min(cap, len(fresh), need)
+
+        # Avoid leaving a positive remainder smaller than MIN_USERS_PER_PROMPT,
+        # which would be impossible to satisfy in a future prompt.
+        leftover = need - take
+        if 0 < leftover < MIN_USERS_PER_PROMPT:
+            # Option A: consume exactly `need` here if it fits within cap + fresh.
+            if need <= cap and len(fresh) >= need:
+                take = need
+            # Option B: reduce take to leave exactly MIN for the next prompt.
+            else:
+                reduced = take - (MIN_USERS_PER_PROMPT - leftover)
+                if reduced >= MIN_USERS_PER_PROMPT:
+                    take = reduced
+
+        if take < MIN_USERS_PER_PROMPT:
+            continue
+
+        rng.shuffle(fresh)
+        for uid, a, o in fresh[:take]:
+            task4_wildchat.append((uid, prompt_idx, a, o))
+            assigned_users.add(uid)
+            prompt_user_count[prompt_idx] += 1
+
+    _progress(
+        f"  {len(assigned_users)} new wildchat users selected for task4 across "
+        f"{len({p for _, p, _, _ in task4_wildchat})} prompts (target {wildchat_to_sample})."
+    )
 
     # ── Assign additional prompts → task5 for ALL wildchat users (fixed + new) ─
     task5_pairs: list[tuple] = []  # (user_id, prompt_idx, ann_idx, offset)
