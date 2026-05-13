@@ -1920,7 +1920,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prolific-code-task5",
-        default="",
+        default="C1RIAWIP",
         help="Prolific completion code for Task 5.",
     )
     args = parser.parse_args()
