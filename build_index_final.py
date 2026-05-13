@@ -55,6 +55,10 @@ MIN_ITEMS            = 2
 SAMPLE_SEED          = 42
 # Known bad prompt indexes — excluded before any mapping is done (same list as build_index.py).
 DEFAULT_SKIP_PROMPT_INDEXES = "60,148,420,244,312,353,240,31,108,79,46,1"
+# Users permanently blocked from appearing in any task output (inappropriate attributes).
+BLOCKED_USER_IDS: frozenset[str] = frozenset({
+    "01a8a88d67f90e8163f7bf2d035bc91b4a78c1471945531d3062225e7ca9e706",
+})
 
 EXTRA_SOURCES = [
     ("cupid",
@@ -324,7 +328,7 @@ def build_task4_task5_items(
         convs_user_ids = all_checklist_users
         _progress("  Warning: convs_index.db not found — skipping convs filter.")
 
-    eligible_user_ids = set(attrs_data.keys()) & convs_user_ids
+    eligible_user_ids = (set(attrs_data.keys()) & convs_user_ids) - BLOCKED_USER_IDS
     _progress(
         f"  {len(eligible_user_ids)} users have both attrs and convs data "
         f"(out of {len(user_prompts)} checklist users with valid pairs)."
