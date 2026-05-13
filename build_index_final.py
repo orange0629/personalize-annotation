@@ -392,9 +392,11 @@ def build_task4_task5_items(
         for uid, a, o in candidates[:need]:
             _assign(uid, prompt_idx, a, o)
 
-    # Phase 2: fill remaining capacity freely (up to MAX per prompt, MAX per user).
+    # Phase 2: fill remaining capacity (only for prompts that already meet minimum).
     rng.shuffle(all_prompt_idxs)
     for prompt_idx in all_prompt_idxs:
+        if prompt_user_count[prompt_idx] < MIN_USERS_PER_PROMPT:
+            continue  # couldn't satisfy minimum — exclude entirely
         cap = MAX_USERS_PER_PROMPT - prompt_user_count[prompt_idx]
         if cap <= 0:
             continue
