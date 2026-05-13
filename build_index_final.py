@@ -37,7 +37,7 @@ TASK5_ITEMS = EXTRACT_DIR / "task5_items.jsonl"
 BASE               = Path("/shared/0/projects/research-jam-summer-2024/tmp")
 CHECKLIST_JSONL    = BASE / "checklist_final_merged_agglo_0.7_v2_LIMA.jsonl"
 CONVS_JSONL        = BASE / "wildchat_long_conversations_15_assistant_like_confidence_final_english_v1.jsonl"
-ATTRS_JSONL        = Path("/home/leczhang/research/llm-personalization/data/attrs_per_conversation_final_merged_agglo_0.7_v2_with_generalist_score.jsonl")
+ATTRS_JSONL        = Path("/home/leczhang/research/llm-personalization/data/attrs_per_conversation_final_merged_agglo_0.7_v2_sampled_5000.jsonl")
 
 CHECKLIST_INDEX_DB = DATA_DIR / "checklist_index.db"
 ATTRS_INDEX_DB     = DATA_DIR / "attrs_index.db"
