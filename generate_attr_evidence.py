@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-For each attribute of the first 100 Task-1 users, ask vLLM to identify which
-conversation and turn(s) best support that attribute.
+For each attribute of the first N users in a task-items file, ask vLLM to
+identify which conversation and turn(s) best support that attribute.
+
+Works for both task1_items.jsonl (round 1) and task4_items.jsonl (round 2);
+both share the same cache since the cache key is "source:user_id".
 
 One LLM prompt is built per (user, attribute) pair. All prompts are batched
 into a single llm.generate() call for efficiency.
 
 Cache format — data/attr_evidence_cache.jsonl, one line per user:
-  {"line_index": N, "user_id": "...", "evidence": [
+  {"cache_key": "source:user_id", "user_id": "...", "evidence": [
       {"conv_idx": 0, "turn_idxs": [1, 2]},   # index matches merged_attributes order
       {"conv_idx": null, "turn_idxs": []},     # no evidence found
       ...
@@ -16,7 +19,14 @@ Cache format — data/attr_evidence_cache.jsonl, one line per user:
 Re-running is safe — already-cached users are skipped unless --force is used.
 
 Usage:
+    # Round 1
     python3 generate_attr_evidence.py \
+        --model meta-llama/Llama-3.1-8B-Instruct \
+        --tensor-parallel-size 4
+
+    # Round 2 (task4) — cache hits are free, only new users are generated
+    python3 generate_attr_evidence.py \
+        --items-file data/extracted/task4_items.jsonl \
         --model meta-llama/Llama-3.1-8B-Instruct \
         --tensor-parallel-size 4
 """
@@ -32,6 +42,7 @@ from typing import Any, Dict, List, Optional
 
 BASE_DIR    = Path(__file__).parent
 TASK1_FILE  = BASE_DIR / "data" / "extracted" / "task1_items.jsonl"
+TASK4_FILE  = BASE_DIR / "data" / "extracted" / "task4_items.jsonl"
 CACHE_FILE  = BASE_DIR / "data" / "attr_evidence_cache.jsonl"
 
 # One prompt per attribute: give full conv context + single attribute + reason.
@@ -67,9 +78,9 @@ Find the turn(s) whose content best matches this attribute and the above reason.
 
 # ─── Data helpers ─────────────────────────────────────────────────────────────
 
-def load_task1_items(max_users: int) -> List[Dict]:
+def load_items(items_file: Path, max_users: int) -> List[Dict]:
     records = []
-    with open(TASK1_FILE, "r", encoding="utf-8") as f:
+    with open(items_file, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -242,14 +253,22 @@ def main() -> None:
     parser.add_argument("--max-new-tokens", type=int, default=8192)
     parser.add_argument("--max-users", type=int, default=100)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--items-file",
+        type=Path,
+        default=None,
+        help="Path to a task-items JSONL file (default: task1_items.jsonl). "
+             "Use task4_items.jsonl for round-2 annotation; the cache is shared.",
+    )
     args = parser.parse_args()
 
-    if not TASK1_FILE.exists():
-        print(f"ERROR: {TASK1_FILE} not found. Run: python3 build_index.py", file=sys.stderr)
+    items_file = args.items_file or TASK1_FILE
+    if not items_file.exists():
+        print(f"ERROR: {items_file} not found.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Loading task1 items (first {args.max_users})...", flush=True)
-    task1_records = load_task1_items(args.max_users)
+    print(f"Loading items from {items_file.name} (first {args.max_users})...", flush=True)
+    task1_records = load_items(items_file, args.max_users)
     print(f"  Loaded {len(task1_records)} records.", flush=True)
 
     already_done = set() if args.force else load_cached_keys()

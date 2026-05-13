@@ -27,15 +27,17 @@ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 MODEL="${MODEL:-Qwen/Qwen3-32B}"
 TP="${TP:-2}"
 MAX_USERS="${MAX_USERS:-100}"
+ITEMS_FILE="${ITEMS_FILE:-data/extracted/task4_items.jsonl}"
 
 echo "=== Job started: $(date) ==="
-echo "Model: $MODEL | TP: $TP | Max users: $MAX_USERS"
+echo "Model: $MODEL | TP: $TP | Max users: $MAX_USERS | Items: $ITEMS_FILE"
 
 python "generate_attr_evidence.py" \
     --model        "$MODEL" \
     --tensor-parallel-size "$TP" \
     --max-users    "$MAX_USERS" \
     --max-model-len 40960 \
+    --items-file   "$ITEMS_FILE" \
     --force
 
 echo "=== Job finished: $(date) ==="
