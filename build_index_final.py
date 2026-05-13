@@ -361,7 +361,7 @@ def build_task4_task5_items(
     # Build per-prompt candidate list (each user appears at most once per prompt).
     prompt_eligible: dict[int, list] = defaultdict(list)
     seen_per_prompt: dict[int, set] = defaultdict(set)
-    for uid in all_wildchat_users:
+    for uid in sorted(all_wildchat_users):
         for prompt_idx, ann_idx, offset in user_prompts.get(uid, []):
             if uid not in seen_per_prompt[prompt_idx]:
                 prompt_eligible[prompt_idx].append((uid, ann_idx, offset))
