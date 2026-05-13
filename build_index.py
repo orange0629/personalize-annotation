@@ -221,6 +221,9 @@ def build_convs_index(force: bool = False) -> None:
     _progress(f"[convs] Done. {count} records indexed, {filtered} filtered (non-English).")
 
 
+CHECKLIST_SAMPLE_SEED = 42
+
+
 def build_checklist_sample(
     n_per_user: int = 10,
     force: bool = False,
@@ -228,8 +231,8 @@ def build_checklist_sample(
 ) -> None:
     """
     Create checklist_sample table inside the checklist index DB.
-    Randomly selects up to n_per_user records per user_id, assigns
-    a sequential sample_index used by the app for navigation.
+    Deterministically selects up to n_per_user records per prompt_index using
+    CHECKLIST_SAMPLE_SEED, assigns a sequential sample_index used by the app.
     Requires the checklist_index table to exist first.
 
     skip_prompt_indexes: set of prompt_index integers to exclude from the sample.
@@ -271,20 +274,32 @@ def build_checklist_sample(
         );
     """)
 
+    import random
+    rng = random.Random(CHECKLIST_SAMPLE_SEED)
+
+    # Fetch all eligible rows grouped by prompt_index
     query = f"""
-        SELECT annotation_index
-        FROM (
-            SELECT annotation_index,
-                   ROW_NUMBER() OVER (PARTITION BY prompt_index ORDER BY RANDOM()) AS rn
-            FROM checklist_index
-            {skip_clause}
-        )
-        WHERE rn <= {n_per_user}
+        SELECT annotation_index, prompt_index
+        FROM checklist_index
+        {skip_clause}
         ORDER BY annotation_index
     """
-    rows = conn.execute(query, sorted(skip_set)).fetchall()
+    all_rows = conn.execute(query, sorted(skip_set)).fetchall()
 
-    for sample_idx, (ann_idx,) in enumerate(rows):
+    # Group by prompt_index, sample up to n_per_user per group deterministically
+    from collections import defaultdict
+    by_prompt: dict = defaultdict(list)
+    for ann_idx, prompt_idx in all_rows:
+        by_prompt[prompt_idx].append(ann_idx)
+
+    sampled = []
+    for prompt_idx in sorted(by_prompt):
+        candidates = by_prompt[prompt_idx]
+        rng.shuffle(candidates)
+        sampled.extend(candidates[:n_per_user])
+    sampled.sort()  # stable order by annotation_index
+
+    for sample_idx, ann_idx in enumerate(sampled):
         cur.execute(
             "INSERT INTO checklist_sample (sample_index, annotation_index) VALUES (?, ?)",
             (sample_idx, ann_idx),
@@ -292,7 +307,7 @@ def build_checklist_sample(
 
     conn.commit()
     conn.close()
-    _progress(f"[sample] Done. {len(rows)} records sampled ({n_per_user} users per prompt, {len(skip_set)} prompt indexes skipped).")
+    _progress(f"[sample] Done. {len(sampled)} records sampled ({n_per_user} users per prompt, {len(skip_set)} prompt indexes skipped).")
 
 
 def _strip_embeddings(obj):
@@ -301,108 +316,6 @@ def _strip_embeddings(obj):
     if isinstance(obj, list):
         return [_strip_embeddings(x) for x in obj]
     return obj
-
-
-def extract_data(force: bool = False) -> None:
-    """
-    Extract the sampled records from the large source files into small portable JSONLs.
-    After running this, the app can run on AWS with only data/extracted/ — no large files needed.
-
-    Outputs:
-      data/extracted/checklist_sample.jsonl  — 9,961 checklist records (embeddings stripped)
-      data/extracted/attrs.jsonl             — all attrs records (embeddings stripped)
-      data/extracted/convs.jsonl             — conversations for users present in attrs
-    """
-    EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
-
-    def _needs_write(path: Path) -> bool:
-        """Return True if the file is missing, empty, or force-overwrite is set."""
-        return force or not path.exists() or path.stat().st_size == 0
-
-    # ── checklist ──────────────────────────────────────────────────────────────
-    out = EXTRACT_DIR / "checklist_sample.jsonl"
-    if not _needs_write(out):
-        _progress(f"[extract] {out.name} already exists, skipping.")
-    else:
-        _progress(f"[extract] Extracting checklist sample -> {out}")
-        with sqlite3.connect(str(CHECKLIST_INDEX_DB), timeout=30) as conn:
-            rows = conn.execute(
-                """SELECT cs.sample_index, ci.byte_offset
-                   FROM checklist_sample cs
-                   JOIN checklist_index ci ON cs.annotation_index = ci.annotation_index
-                   ORDER BY cs.sample_index"""
-            ).fetchall()
-        n = len(rows)
-        if n == 0:
-            raise RuntimeError("[extract] checklist_sample JOIN returned 0 rows — checklist_sample may be stale. Run with --force.")
-        tmp = out.with_suffix(".jsonl.tmp")
-        with open(CHECKLIST_JSONL, "rb") as fh, open(tmp, "w", encoding="utf-8") as out_f:
-            for sample_index, offset in rows:
-                fh.seek(offset)
-                rec = _strip_embeddings(json.loads(fh.readline()))
-                rec["sample_index"] = sample_index
-                out_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                if (sample_index + 1) % 1000 == 0:
-                    _progress(f"  [extract/checklist] {sample_index + 1}/{n}")
-        tmp.replace(out)
-        _progress(f"[extract] checklist done: {n} records, {out.stat().st_size // 1024 // 1024} MB")
-
-    # ── attrs ──────────────────────────────────────────────────────────────────
-    out = EXTRACT_DIR / "attrs.jsonl"
-    if not _needs_write(out):
-        _progress(f"[extract] {out.name} already exists, skipping.")
-    else:
-        _progress(f"[extract] Extracting attrs -> {out}")
-        with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=30) as conn:
-            rows = conn.execute(
-                "SELECT line_index, byte_offset FROM attrs_index ORDER BY line_index"
-            ).fetchall()
-        n = len(rows)
-        if n == 0:
-            raise RuntimeError("[extract] attrs_index returned 0 rows.")
-        tmp = out.with_suffix(".jsonl.tmp")
-        with open(ATTRS_JSONL, "rb") as fh, open(tmp, "w", encoding="utf-8") as out_f:
-            for line_index, offset in rows:
-                fh.seek(offset)
-                rec = _strip_embeddings(json.loads(fh.readline()))
-                rec["line_index"] = line_index
-                out_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                if (line_index + 1) % 2000 == 0:
-                    _progress(f"  [extract/attrs] {line_index + 1}/{n}")
-        tmp.replace(out)
-        _progress(f"[extract] attrs done: {n} records, {out.stat().st_size // 1024 // 1024} MB")
-
-    # ── convs ──────────────────────────────────────────────────────────────────
-    out = EXTRACT_DIR / "convs.jsonl"
-    if not _needs_write(out):
-        _progress(f"[extract] {out.name} already exists, skipping.")
-    else:
-        _progress(f"[extract] Extracting conversations -> {out}")
-        with sqlite3.connect(str(ATTRS_INDEX_DB), timeout=30) as conn:
-            user_ids = set(r[0] for r in conn.execute("SELECT user_id FROM attrs_index").fetchall())
-        with sqlite3.connect(str(CONVS_INDEX_DB), timeout=30) as conn:
-            all_rows = conn.execute(
-                "SELECT hashed_ip, byte_offset FROM convs_index ORDER BY id"
-            ).fetchall()
-        relevant = [(ip, off) for ip, off in all_rows if ip in user_ids]
-        n = len(relevant)
-        _progress(f"  [extract/convs] {n} records for {len(user_ids)} users")
-        if n == 0:
-            raise RuntimeError("[extract] convs: no matching users found.")
-        tmp = out.with_suffix(".jsonl.tmp")
-        with open(CONVS_JSONL, "rb") as fh, open(tmp, "w", encoding="utf-8") as out_f:
-            for i, (hashed_ip, offset) in enumerate(relevant):
-                fh.seek(offset)
-                out_f.write(fh.readline().decode("utf-8", errors="replace"))
-                if (i + 1) % 2000 == 0:
-                    _progress(f"  [extract/convs] {i + 1}/{n}")
-        tmp.replace(out)
-        _progress(f"[extract] convs done: {n} records, {out.stat().st_size // 1024 // 1024} MB")
-
-    _progress(
-        f"\n[extract] All done. Copy annotation_tool/data/extracted/ to AWS — "
-        f"no large source files needed."
-    )
 
 
 TASK1_WILDCHAT_N = 50   # first N Wildchat users (after english filtering)
@@ -556,15 +469,46 @@ def build_task1_items(force: bool = False) -> None:
               + ", ".join(f"{s}={TASK1_EXTRA_N}" for s, _, _ in EXTRA_SOURCES) + ")")
 
 
-def build_task2_items(force: bool = False) -> None:
+CHECKLIST_SAMPLE_JSONL = EXTRACT_DIR / "checklist_sample.jsonl"
+
+
+def build_task2_items(force: bool = False, from_checklist_sample: bool = False) -> None:
     """
     Build task2_items.jsonl: one record per checklist sample entry (used by Task 2 and Task 3).
-    Uses the SQLite checklist index as cache (must be built first).
+
+    --from-checklist-sample: read directly from data/extracted/checklist_sample.jsonl
+      (the legacy file produced by the old pipeline). Use this to preserve a specific
+      sample without re-running the SQLite-based sampler.
+
+    Default: uses the SQLite checklist index + checklist_sample table.
     """
     EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
     if TASK2_ITEMS.exists() and not force:
         _progress(f"[task2] {TASK2_ITEMS.name} already exists. Use --force to rebuild.")
         return
+
+    if from_checklist_sample:
+        if not CHECKLIST_SAMPLE_JSONL.exists():
+            _progress(f"[task2] {CHECKLIST_SAMPLE_JSONL} not found.")
+            return
+        _progress(f"[task2] Building task2_items.jsonl from {CHECKLIST_SAMPLE_JSONL.name} ...")
+        records = []
+        with open(CHECKLIST_SAMPLE_JSONL, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    records.append(json.loads(line))
+        records.sort(key=lambda r: r.get("sample_index", 0))
+        tmp = TASK2_ITEMS.with_suffix(".jsonl.tmp")
+        with open(tmp, "w", encoding="utf-8") as out_f:
+            for item_index, rec in enumerate(records):
+                rec = _strip_embeddings(rec)
+                rec["item_index"] = item_index
+                out_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        tmp.replace(TASK2_ITEMS)
+        _progress(f"[task2] Done. {len(records)} items from {CHECKLIST_SAMPLE_JSONL.name} -> {TASK2_ITEMS.name}")
+        return
+
     if not CHECKLIST_INDEX_DB.exists():
         _progress("[task2] checklist index not found — run without --extract-only to build it first.")
         return
@@ -617,6 +561,8 @@ def main() -> None:
     parser.add_argument("--force",           action="store_true", help="Rebuild even if index exists")
     parser.add_argument("--extract",         action="store_true", help="Also extract portable data files after indexing")
     parser.add_argument("--extract-only",    action="store_true", help="Only extract (skip index rebuild)", default=True)
+    parser.add_argument("--from-checklist-sample", action="store_true",
+                        help="Build task2_items.jsonl directly from data/extracted/checklist_sample.jsonl")
     args = parser.parse_args()
 
     if not args.extract_only:
@@ -659,7 +605,7 @@ def main() -> None:
         if args.force or not _table_exists(CHECKLIST_INDEX_DB, "checklist_sample"):
             build_checklist_sample(n_per_user=args.n_per_user, force=True, skip_prompt_indexes=skip_set)
         build_task1_items(force=args.force)
-        build_task2_items(force=args.force)
+        build_task2_items(force=args.force, from_checklist_sample=args.from_checklist_sample)
 
     _progress("All done.")
 
