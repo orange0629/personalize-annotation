@@ -2155,7 +2155,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--prolific-code-task4",
-        default="",
+        default="C8LTQ4U9",
         help="Prolific completion code for Task 4.",
     )
     parser.add_argument(

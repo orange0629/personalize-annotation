@@ -218,7 +218,7 @@
             <div class="cl-item r-none" id="cl-{{ loop.index0 }}">
               <div class="cl-attr-text">
                 <span class="cl-attr-label">{{ it.attribute }}</span>
-                <span class="cl-relev">relevance {{ "%.2f"|format(it.relevance) }}</span>
+                {% if it.relevance is defined and it.relevance is not none %}<span class="cl-relev">relevance {{ "%.2f"|format(it.relevance) }}</span>{% endif %}
               </div>
 
               <!-- YES / NO buttons -->

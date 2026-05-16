@@ -466,7 +466,7 @@ def main() -> None:
             "meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen3-72B"
         ),
     )
-    parser.add_argument("--task", choices=["3", "5"], default="3",
+    parser.add_argument("--task", choices=["3", "5"], default="5",
                         help="Which task's items to classify (3=task2_items, 5=task5_items). Default: 3.")
     parser.add_argument("--tensor-parallel-size", type=int, default=4,
                         help="(vLLM only) tensor parallel size")
