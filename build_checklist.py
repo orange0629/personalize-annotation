@@ -8,7 +8,7 @@ Two modes:
 
 Hard-coded constants (edit at the top of this file as needed):
 
-  LLM_VOTERS    — stems of files under data/relevance/
+  LLM_VOTERS    — stems of files under data/relevance_task3/
   ANNOTATORS    — stems of annotator IDs (looks for {id}_task3.jsonl in data/annotations/)
   CONVS_JSONL   — path to the wildchat conversations JSONL (required; error if missing)
 
@@ -60,7 +60,7 @@ from typing import Dict, List, Tuple
 
 BASE_DIR       = Path(__file__).parent
 TASK2_FILE     = BASE_DIR / "data" / "extracted" / "task2_items.jsonl"
-RELEVANCE_DIR  = BASE_DIR / "data" / "relevance"
+RELEVANCE_DIR  = BASE_DIR / "data" / "relevance_task3"
 ANNOTATIONS_DIR = BASE_DIR / "data" / "annotations"
 BEHAVIORS_SIMPLE_DIR = BASE_DIR / "data" / "behaviors_simple"
 BEHAVIORS_DIR  = BASE_DIR / "data" / "behaviors"

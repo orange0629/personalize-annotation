@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-Overall agreement analysis for Task 3 (attribute relevance classification).
+Overall agreement analysis for Task 3/5 (attribute relevance classification).
 
 Pools every (attribute, sample_index) judgment from:
-  data/relevance/*.jsonl          — LLM model votes
-  data/annotations/*_task3.jsonl — human annotator votes
+  data/relevance_task3/*.jsonl    — LLM model votes (task 3)
+  data/relevance_task5/*.jsonl    — LLM model votes (task 5)
+  data/annotations/*_task3.jsonl — human annotator votes (task 3)
+  data/annotations/*_task5.jsonl — human annotator votes (task 5)
 
 For every pair of raters, computes:
   • % agreement on shared items
@@ -28,9 +30,10 @@ from itertools import combinations
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-BASE_DIR      = Path(__file__).parent
-RELEVANCE_DIR = BASE_DIR / "data" / "relevance"
-ANNOT_DIR     = BASE_DIR / "data" / "annotations"
+BASE_DIR           = Path(__file__).parent
+RELEVANCE_DIR      = BASE_DIR / "data" / "relevance_task3"
+RELEVANCE_DIR_TASK5 = BASE_DIR / "data" / "relevance_task5"
+ANNOT_DIR          = BASE_DIR / "data" / "annotations"
 
 Key = Tuple[str, int]  # (attribute_text, sample_index)
 
@@ -60,12 +63,14 @@ def load_model_votes(relevance_dir: Path = RELEVANCE_DIR) -> Dict[str, Dict[Key,
 
 
 def load_human_votes(annot_dir: Path = ANNOT_DIR,
-                     skip_admin: bool = False) -> Dict[str, Dict[Key, bool]]:
+                     skip_admin: bool = False,
+                     task: str = "3") -> Dict[str, Dict[Key, bool]]:
     raters: Dict[str, Dict[Key, bool]] = {}
     if not annot_dir.exists():
         return raters
-    for fpath in sorted(annot_dir.glob("*_task3.jsonl")):
-        name = fpath.name[: -len("_task3.jsonl")]
+    suffix = f"_task{task}.jsonl"
+    for fpath in sorted(annot_dir.glob(f"*{suffix}")):
+        name = fpath.name[: -len(suffix)]
         if skip_admin and name.lower() == "admin":
             continue
         votes: Dict[Key, bool] = {}

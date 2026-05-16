@@ -14,8 +14,9 @@ Supported backends / models:
   anthropic — e.g., claude-3-5-sonnet-20241022
   vllm      — e.g., meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen3-72B
 
-Each run writes to data/relevance/<model_tag>.jsonl (one JSON line per sample).
-Re-running is safe — already-cached sample_indexes are skipped unless --force.
+Each run writes to data/relevance_task3/<model_tag>.jsonl or data/relevance_task5/<model_tag>.jsonl
+depending on --task (default: 3). Re-running is safe — already-cached sample_indexes are skipped
+unless --force.
 
 Output line format:
   {
@@ -55,9 +56,11 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-BASE_DIR      = Path(__file__).parent
-TASK2_FILE    = BASE_DIR / "data" / "extracted" / "task2_items.jsonl"
-RELEVANCE_DIR = BASE_DIR / "data" / "relevance"
+BASE_DIR           = Path(__file__).parent
+TASK2_FILE         = BASE_DIR / "data" / "extracted" / "task2_items.jsonl"
+TASK5_FILE         = BASE_DIR / "data" / "extracted" / "task5_items.jsonl"
+RELEVANCE_DIR_TASK3 = BASE_DIR / "data" / "relevance_task3"
+RELEVANCE_DIR_TASK5 = BASE_DIR / "data" / "relevance_task5"
 
 # ─── Prompt template ──────────────────────────────────────────────────────────
 
@@ -85,10 +88,11 @@ def build_prompt(attribute: str, prompt_text: str) -> str:
 
 # ─── Data helpers ──────────────────────────────────────────────────────────────
 
-def load_task2_items(max_samples: int, start_index: int = 0, end_index: Optional[int] = None) -> List[Dict]:
-    """Load records from task2_items.jsonl, using line position as sample_index."""
+def load_task2_items(max_samples: int, start_index: int = 0, end_index: Optional[int] = None,
+                     filepath: Optional[Path] = None) -> List[Dict]:
+    """Load records from a task items file, using line position as sample_index."""
     records = []
-    with open(TASK2_FILE, "r", encoding="utf-8") as f:
+    with open(filepath or TASK2_FILE, "r", encoding="utf-8") as f:
         for line_idx, line in enumerate(f):
             line = line.strip()
             if not line:
@@ -451,7 +455,7 @@ def main() -> None:
         description=(
             "Classify whether each profile attribute is relevant for personalizing "
             "the response to the corresponding prompt. "
-            "Saves results to data/relevance/<model_tag>.jsonl."
+            "Saves results to data/relevance_task{3,5}/<model_tag>.jsonl."
         )
     )
     parser.add_argument("--backend", required=True, choices=["openai", "anthropic", "vllm", "bedrock"])
@@ -462,6 +466,8 @@ def main() -> None:
             "meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen3-72B"
         ),
     )
+    parser.add_argument("--task", choices=["3", "5"], default="3",
+                        help="Which task's items to classify (3=task2_items, 5=task5_items). Default: 3.")
     parser.add_argument("--tensor-parallel-size", type=int, default=4,
                         help="(vLLM only) tensor parallel size")
     parser.add_argument("--max-model-len", type=int, default=32768,
@@ -472,25 +478,28 @@ def main() -> None:
                         help="Max tokens to generate. Keep high to allow reasoning before the answer.")
     parser.add_argument("--max-samples", type=int, default=10000)
     parser.add_argument("--start-index", type=int, default=0,
-                        help="First line index in task2_items.jsonl to process (inclusive).")
+                        help="First line index in the items file to process (inclusive).")
     parser.add_argument("--end-index", type=int, default=None,
-                        help="Last line index in task2_items.jsonl to process (exclusive).")
+                        help="Last line index in the items file to process (exclusive).")
     parser.add_argument("--region", default="us-east-1",
                         help="(bedrock only) AWS region, e.g. us-east-1, us-west-2.")
     parser.add_argument("--force", action="store_true",
                         help="Ignore cache and regenerate all samples.")
     args = parser.parse_args()
 
-    if not TASK2_FILE.exists():
-        print(f"ERROR: {TASK2_FILE} not found. Run: python3 build_index.py", file=sys.stderr)
+    items_file   = TASK5_FILE  if args.task == "5" else TASK2_FILE
+    relevance_dir = RELEVANCE_DIR_TASK5 if args.task == "5" else RELEVANCE_DIR_TASK3
+
+    if not items_file.exists():
+        print(f"ERROR: {items_file} not found.", file=sys.stderr)
         sys.exit(1)
 
-    RELEVANCE_DIR.mkdir(parents=True, exist_ok=True)
-    cache_file = RELEVANCE_DIR / f"{model_tag(args.model)}.jsonl"
+    relevance_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = relevance_dir / f"{model_tag(args.model)}.jsonl"
 
     range_desc = f"[{args.start_index}, {args.end_index if args.end_index is not None else '∞'})"
-    print(f"Loading task2 items (max {args.max_samples} samples, index range {range_desc})...", flush=True)
-    all_records = load_task2_items(args.max_samples, start_index=args.start_index, end_index=args.end_index)
+    print(f"Loading task{args.task} items (max {args.max_samples} samples, index range {range_desc})...", flush=True)
+    all_records = load_task2_items(args.max_samples, start_index=args.start_index, end_index=args.end_index, filepath=items_file)
     print(f"  Loaded {len(all_records)} samples.", flush=True)
 
     already_done = set() if args.force else load_cached_indexes(cache_file)

@@ -44,13 +44,16 @@ TASK1_ITEMS = BASE_DIR / "data" / "extracted" / "task1_items.jsonl"
 TASK2_ITEMS = BASE_DIR / "data" / "extracted" / "task2_items.jsonl"
 TASK4_ITEMS = BASE_DIR / "data" / "extracted" / "task4_items.jsonl"
 TASK5_ITEMS = BASE_DIR / "data" / "extracted" / "task5_items.jsonl"
+TASK6_ITEMS = BASE_DIR / "data" / "extracted" / "task6_items.jsonl"
 
 # ─── Task settings (overridable via CLI) ──────────────────────────────────────
 TASK1_MAX_USERS   = 100  # Only show the first N users for Task 1
 TASK2_MAX_ITEMS   = 0    # 0 = no limit; set via --task2-max-items
 TASK3_MAX_PROMPTS = 5    # Max unique prompts for Task 3; set via --task3-max-prompts
-TASK4_MAX_USERS   = 100  # Only show the first N users for Task 4
+TASK4_START       = 0    # First item index shown for Task 4 (inclusive)
+TASK4_END         = 0    # Last item index shown for Task 4 (exclusive; 0 = no limit)
 TASK5_MAX_PROMPTS = 100    # Max unique prompts for Task 5; set via --task5-max-prompts
+TASK6_MAX_ITEMS   = 0    # 0 = no limit; set via --task6-max-items
 
 # ─── Flask setup ──────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -69,10 +72,11 @@ _task1_items: List[Dict] = []  # one entry per user (attrs + embedded conversati
 _task2_items: List[Dict] = []  # one entry per checklist item (used by Task 2 & 3)
 _task4_items: List[Dict] = []  # round-2 version of task1 items
 _task5_items: List[Dict] = []  # round-2 version of task2 items (drives task5 prompts)
+_task6_items: List[Dict] = []  # one item per (user, prompt) pair with both responses
 
 
 def _load_data() -> None:
-    global _task1_items, _task2_items, _task4_items, _task5_items
+    global _task1_items, _task2_items, _task4_items, _task5_items, _task6_items
     if TASK1_ITEMS.exists():
         with open(TASK1_ITEMS, "r", encoding="utf-8") as f:
             _task1_items = [json.loads(ln) for ln in f if ln.strip()]
@@ -104,6 +108,14 @@ def _load_data() -> None:
         print(f"Loaded {len(_task5_items)} task5 items.", flush=True)
     else:
         print(f"Warning: {TASK5_ITEMS} not found.", flush=True)
+
+    if TASK6_ITEMS.exists():
+        with open(TASK6_ITEMS, "r", encoding="utf-8") as f:
+            _task6_items = [json.loads(ln) for ln in f if ln.strip()]
+        _task6_items.sort(key=lambda r: r.get("item_index", 0))
+        print(f"Loaded {len(_task6_items)} task6 items.", flush=True)
+    else:
+        print(f"Warning: {TASK6_ITEMS} not found.", flush=True)
 
 
 _load_data()
@@ -188,19 +200,19 @@ _load_behaviors()
 
 
 # ─── Relevance classifications from LLMs ──────────────────────────────────────
-# Loaded from data/relevance/*.jsonl, produced by classify_attribute_relevance.py.
-# _relevance[sample_index][attribute_text][model] = True/False
-RELEVANCE_DIR_APP = BASE_DIR / "data" / "relevance"
-_relevance: Dict[int, Dict[str, Dict[str, bool]]] = {}
+# Loaded from data/relevance_task{3,5}/*.jsonl, produced by classify_attribute_relevance.py.
+# _relevance_task3/5[sample_index][attribute_text][model] = True/False
+RELEVANCE_DIR_TASK3 = BASE_DIR / "data" / "relevance_task3"
+RELEVANCE_DIR_TASK5 = BASE_DIR / "data" / "relevance_task5"
+_relevance_task3: Dict[int, Dict[str, Dict[str, bool]]] = {}
+_relevance_task5: Dict[int, Dict[str, Dict[str, bool]]] = {}
 
 
-def _load_relevance() -> None:
-    global _relevance
-    if not RELEVANCE_DIR_APP.exists():
-        return
-    files = sorted(RELEVANCE_DIR_APP.glob("*.jsonl"))
-    if not files:
-        return
+def _load_relevance_from(relevance_dir: Path) -> Dict[int, Dict[str, Dict[str, bool]]]:
+    result: Dict[int, Dict[str, Dict[str, bool]]] = {}
+    if not relevance_dir.exists():
+        return result
+    files = sorted(relevance_dir.glob("*.jsonl"))
     loaded_models: List[str] = []
     for fpath in files:
         with open(fpath, "r", encoding="utf-8") as f:
@@ -214,20 +226,28 @@ def _load_relevance() -> None:
                     model = rec.get("model", fpath.stem)
                     if sidx is None:
                         continue
-                    _relevance.setdefault(sidx, {})
+                    result.setdefault(sidx, {})
                     for item in rec.get("items", []):
                         attr = item.get("attribute", "")
                         if not attr:
                             continue
-                        _relevance[sidx].setdefault(attr, {})[model] = bool(item.get("relevant", False))
+                        result[sidx].setdefault(attr, {})[model] = bool(item.get("relevant", False))
                 except Exception:
                     continue
         loaded_models.append(fpath.name)
-    print(
-        f"Loaded relevance classifications for {len(_relevance)} samples "
-        f"from {len(loaded_models)} file(s): {', '.join(loaded_models)}",
-        flush=True,
-    )
+    if loaded_models:
+        print(
+            f"Loaded relevance from {relevance_dir.name}: {len(result)} samples "
+            f"from {len(loaded_models)} file(s): {', '.join(loaded_models)}",
+            flush=True,
+        )
+    return result
+
+
+def _load_relevance() -> None:
+    global _relevance_task3, _relevance_task5
+    _relevance_task3 = _load_relevance_from(RELEVANCE_DIR_TASK3)
+    _relevance_task5 = _load_relevance_from(RELEVANCE_DIR_TASK5)
 
 
 _load_relevance()
@@ -358,12 +378,25 @@ def task3_count() -> int:
 
 
 def attrs4_count() -> int:
-    return min(len(_task4_items), TASK4_MAX_USERS)
+    """Number of task4 items visible in the current range."""
+    n = len(_task4_items)
+    end = TASK4_END if TASK4_END > 0 else n
+    return max(0, min(end, n) - TASK4_START)
+
+
+def task4_global_idx(local_idx: int) -> int:
+    """Convert a 0-based local navigation index to the global annotation index."""
+    return TASK4_START + local_idx
 
 
 def task5_count() -> int:
     n = len(_task5_prompts)
     return min(n, TASK5_MAX_PROMPTS) if TASK5_MAX_PROMPTS > 0 else n
+
+
+def task6_count() -> int:
+    n = len(_task6_items)
+    return min(n, TASK6_MAX_ITEMS) if TASK6_MAX_ITEMS > 0 else n
 
 
 def fetch_attrs_record(idx: int) -> Optional[Dict]:
@@ -372,9 +405,11 @@ def fetch_attrs_record(idx: int) -> Optional[Dict]:
     return None
 
 
-def fetch_attrs4_record(idx: int) -> Optional[Dict]:
-    if 0 <= idx < len(_task4_items):
-        return _task4_items[idx]
+def fetch_attrs4_record(local_idx: int) -> Optional[Dict]:
+    """Fetch task4 record by local (0-based) index within the configured range."""
+    global_idx = task4_global_idx(local_idx)
+    if 0 <= global_idx < len(_task4_items):
+        return _task4_items[global_idx]
     return None
 
 
@@ -404,9 +439,13 @@ def get_attrs_meta_list() -> List[Dict]:
 
 
 def get_attrs4_meta_list() -> List[Dict]:
+    """Return meta entries for the configured task4 range; line_index is the global index."""
+    n = len(_task4_items)
+    end = TASK4_END if TASK4_END > 0 else n
+    end = min(end, n)
     return [
-        {"line_index": i, "user_id": r.get("user_id", "")}
-        for i, r in enumerate(_task4_items)
+        {"line_index": TASK4_START + local_i, "user_id": _task4_items[TASK4_START + local_i].get("user_id", "")}
+        for local_i in range(max(0, end - TASK4_START))
     ]
 
 
@@ -570,8 +609,12 @@ def save_annotation(task: str, record: Dict) -> None:
             fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
 
-def count_annotated(task: str, total: int) -> int:
-    """Count how many of the [0, total) items this annotator has fully completed."""
+def count_annotated(task: str, total: int, offset: int = 0) -> int:
+    """Count how many of the total items this annotator has fully completed.
+
+    offset: for tasks that use a global index (e.g. task4 with a range), the
+    annotation key is offset+i rather than i.
+    """
     existing = load_existing_annotations(task)
     count = 0
     if task in ("3", "5"):
@@ -597,7 +640,7 @@ def count_annotated(task: str, total: int) -> int:
                 count += 1
         return count
     for i in range(total):
-        rec = existing.get(str(i))
+        rec = existing.get(str(offset + i))
         if not rec:
             continue
         if rec.get("flagged"):
@@ -610,6 +653,15 @@ def count_annotated(task: str, total: int) -> int:
             judgments = rec.get("relevance_judgments", [])
             if judgments and all(j.get("rating") not in (None, "none", "") for j in judgments):
                 count += 1
+        elif task == "6":
+            item = _task6_items[i] if i < len(_task6_items) else None
+            if item:
+                n_attrs = len(item.get("items", []))
+                judgments = rec.get("personalization_judgments", [])
+                if n_attrs > 0 and len(judgments) == n_attrs and all(
+                    j.get("better") is not None for j in judgments
+                ):
+                    count += 1
     return count
 
 
@@ -707,6 +759,8 @@ def _next_redirect(next_task: str):
         return redirect(url_for("task4_view", idx=0))
     if next_task == "task5":
         return redirect(url_for("task5_view", idx=0))
+    if next_task == "task6":
+        return redirect(url_for("task6_view", idx=0))
     return redirect(url_for("task_select"))
 
 
@@ -743,8 +797,10 @@ def task_select():
     t2_ready = bool(_task2_items)
     t4_count = attrs4_count()
     t5_count = task5_count()
+    t6_count = task6_count()
     t4_ready = bool(_task4_items)
     t5_ready = bool(_task5_items)
+    t6_ready = bool(_task6_items)
     return render_template(
         "select.html",
         annotator=annotator_name(),
@@ -753,9 +809,13 @@ def task_select():
         t1_ready=t1_ready,
         t2_ready=t2_ready,
         t4_count=t4_count,
+        t4_start=TASK4_START,
+        t4_end=TASK4_END,
         t5_count=t5_count,
+        t6_count=t6_count,
         t4_ready=t4_ready,
         t5_ready=t5_ready,
+        t6_ready=t6_ready,
     )
 
 
@@ -1206,9 +1266,9 @@ def task3_view(idx: int):
     task_done = count_annotated("3", total) >= total
 
     # Per-attribute model votes: look up via each attribute's own sample_index
-    # _relevance[sample_index][attribute_text][model] = bool
+    # _relevance_task3[sample_index][attribute_text][model] = bool
     attr_model_relevance: Dict[str, Dict[str, bool]] = {
-        a["attribute"]: _relevance.get(a["sample_index"], {}).get(a["attribute"], {})
+        a["attribute"]: _relevance_task3.get(a["sample_index"], {}).get(a["attribute"], {})
         for a in profile_attrs
     }
 
@@ -1436,9 +1496,10 @@ def task4_view(idx: int):
         return render_template("error.html", msg="Task 4 items not found.")
 
     idx = max(0, min(idx, total - 1))
+    global_idx = task4_global_idx(idx)
     record = fetch_attrs4_record(idx)
     if not record:
-        return render_template("error.html", msg=f"Could not fetch task4 record {idx}.")
+        return render_template("error.html", msg=f"Could not fetch task4 record {global_idx}.")
 
     user_id = record.get("user_id", "")
     merged_attrs = record.get("merged_attributes", [])
@@ -1474,7 +1535,7 @@ def task4_view(idx: int):
             "html": ch,
         })
 
-    existing = load_existing_annotations("4").get(str(idx))
+    existing = load_existing_annotations("4").get(str(global_idx))
 
     if existing and existing.get("flagged"):
         is_annotated = True
@@ -1508,7 +1569,7 @@ def task4_view(idx: int):
                     })
         attr_evidence.append(turns_out)
 
-    task_done = count_annotated("4", total) >= total
+    task_done = count_annotated("4", total, TASK4_START) >= total
 
     admin_annots: Optional[List[List[Dict]]] = None
     admin_agreement: Optional[List[Dict]] = None
@@ -1520,7 +1581,7 @@ def task4_view(idx: int):
         for a_idx in range(len(merged_attrs)):
             per_attr = []
             for ann, recs in all_annots.items():
-                rec = recs.get(str(idx))
+                rec = recs.get(str(global_idx))
                 if rec:
                     js = rec.get("attr_judgments", [])
                     if a_idx < len(js):
@@ -1567,7 +1628,7 @@ def task4_save(idx: int):
     data = request.get_json(force=True)
     record = {
         "task": "4",
-        "index": idx,
+        "index": task4_global_idx(idx),
         "attr_judgments": data.get("attr_judgments", []),
         "missing_attrs": data.get("missing_attrs", ""),
         "overall_note": data.get("overall_note", ""),
@@ -1575,7 +1636,7 @@ def task4_save(idx: int):
     }
     save_annotation("4", record)
     total = attrs4_count()
-    all_done = total > 0 and count_annotated("4", total) >= total
+    all_done = total > 0 and count_annotated("4", total, TASK4_START) >= total
     return jsonify({"ok": True, "all_done": all_done})
 
 
@@ -1681,7 +1742,7 @@ def task5_view(idx: int):
     task_done = count_annotated("5", total) >= total
 
     attr_model_relevance: Dict[str, Dict[str, bool]] = {
-        a["attribute"]: _relevance.get(a["sample_index"], {}).get(a["attribute"], {})
+        a["attribute"]: _relevance_task5.get(a["sample_index"], {}).get(a["attribute"], {})
         for a in profile_attrs
     }
 
@@ -1689,6 +1750,17 @@ def task5_view(idx: int):
     admin_agreement: Optional[List[Dict]] = None
     global_agreement: Optional[Dict] = None
     if is_admin():
+        from analyze_relevance_agreement import (
+            load_model_votes as _load_mv,
+            load_human_votes as _load_hv,
+            build_agreement_data,
+            RELEVANCE_DIR_TASK5 as _REL_DIR_T5,
+            ANNOT_DIR as _ANN_DIR,
+        )
+        global_agreement = build_agreement_data(
+            _load_mv(_REL_DIR_T5),
+            _load_hv(_ANN_DIR, skip_admin=False, task="5"),
+        )
         all_annots = load_all_annotators("5")
         admin_annots = []
         admin_agreement = []
@@ -1837,6 +1909,174 @@ def task5_complete():
     )
 
 
+# ─── Routes: Task 6 — Personalization Quality Annotation ─────────────────────
+
+@app.route("/task6")
+def task6_redirect():
+    if not annotator_name():
+        return redirect(url_for("index", next="task6"))
+    return redirect(url_for("task6_view", idx=0))
+
+
+@app.route("/task6/<int:idx>")
+def task6_view(idx: int):
+    if not annotator_name():
+        return redirect(url_for("index"))
+
+    total = task6_count()
+    if total == 0:
+        return render_template("error.html", msg="No Task-6 items available. Run run_generate_task6.sh first.")
+
+    idx = max(0, min(idx, total - 1))
+    item = _task6_items[idx]
+
+    existing = load_existing_annotations("6").get(str(idx))
+    existing_judgments: Dict[str, Optional[bool]] = {}
+    existing_note    = ""
+    existing_flagged = False
+    if existing:
+        existing_flagged = existing.get("flagged", False)
+        existing_note    = existing.get("note", "")
+        for j in existing.get("personalization_judgments", []):
+            existing_judgments[j["attribute"]] = j.get("better")
+
+    checklist_items = item.get("items", [])
+    is_annotated = False
+    if existing_flagged:
+        is_annotated = True
+    elif existing and checklist_items:
+        is_annotated = (
+            len(existing.get("personalization_judgments", [])) == len(checklist_items) and
+            all(j.get("better") is not None
+                for j in existing.get("personalization_judgments", []))
+        )
+
+    task_done = count_annotated("6", total) >= total
+
+    admin_annots: Optional[List[Dict]] = None
+    if is_admin():
+        all_annots = load_all_annotators("6")
+        admin_annots = []
+        for it in checklist_items:
+            attr_text = it["attribute"]
+            per_attr: List[Dict] = []
+            for ann, recs in all_annots.items():
+                rec = recs.get(str(idx))
+                if rec:
+                    for j in rec.get("personalization_judgments", []):
+                        if j.get("attribute") == attr_text:
+                            per_attr.append({
+                                "annotator": ann,
+                                "better":    j.get("better"),
+                            })
+                            break
+            admin_annots.append(per_attr)
+
+    return render_template(
+        "task6.html",
+        idx=idx,
+        total=total,
+        item=item,
+        checklist_items=checklist_items,
+        existing_judgments=existing_judgments,
+        existing_note=existing_note,
+        existing_flagged=existing_flagged,
+        is_annotated=is_annotated,
+        is_admin=is_admin(),
+        admin_annots=admin_annots,
+        task_done=task_done,
+        annotator=annotator_name(),
+    )
+
+
+@app.route("/task6/<int:idx>/save", methods=["POST"])
+def task6_save(idx: int):
+    if not annotator_name():
+        return jsonify({"ok": False, "error": "Not logged in"}), 401
+
+    total = task6_count()
+    if idx >= total:
+        return jsonify({"ok": False, "error": "Index out of range"}), 400
+
+    item    = _task6_items[idx]
+    data    = request.get_json(force=True)
+    flagged = data.get("flagged", False)
+    note    = data.get("note", "")
+
+    judgments_by_attr: Dict[str, Optional[bool]] = {
+        j["attribute"]: j.get("better")
+        for j in data.get("personalization_judgments", [])
+    }
+
+    personalization_judgments = [
+        {"attribute": it["attribute"], "better": judgments_by_attr.get(it["attribute"])}
+        for it in item.get("items", [])
+    ]
+
+    save_annotation("6", {
+        "task":                     "6",
+        "index":                    idx,
+        "item_index":               item.get("item_index", idx),
+        "prompt_index":             item.get("prompt_index", -1),
+        "user_id":                  item.get("user_id", ""),
+        "personalization_judgments": personalization_judgments,
+        "note":                     note,
+        "flagged":                  flagged,
+    })
+
+    all_done = total > 0 and count_annotated("6", total) >= total
+    return jsonify({"ok": True, "all_done": all_done})
+
+
+@app.route("/task6/list")
+def task6_list():
+    if not annotator_name():
+        return jsonify([])
+    existing = load_existing_annotations("6")
+    result = []
+    total = task6_count()
+    for i, item in enumerate(_task6_items[:total]):
+        rec = existing.get(str(i))
+        flagged = bool(rec and rec.get("flagged"))
+        if flagged:
+            annotated = True
+        elif rec:
+            n_attrs = len(item.get("items", []))
+            judgments = rec.get("personalization_judgments", [])
+            annotated = (
+                n_attrs > 0 and
+                len(judgments) == n_attrs and
+                all(j.get("better") is not None for j in judgments)
+            )
+        else:
+            annotated = False
+        result.append({
+            "annotation_index": i,
+            "prompt_index":     item.get("prompt_index", -1),
+            "prompt_snippet":   item.get("prompt_text", "")[:120],
+            "n_attrs":          len(item.get("items", [])),
+            "annotated":        annotated,
+        })
+    return jsonify(result)
+
+
+@app.route("/task6/complete")
+def task6_complete():
+    if not annotator_name():
+        return redirect(url_for("index"))
+    prolific_code = app.config.get("PROLIFIC_CODE_TASK6", "")
+    prolific_url  = (
+        f"https://app.prolific.com/submissions/complete?cc={prolific_code}"
+        if prolific_code else ""
+    )
+    return render_template(
+        "complete.html",
+        prolific_url=prolific_url,
+        prolific_code=prolific_code,
+        annotator=annotator_name(),
+    )
+
+
 # ─── Error template route ─────────────────────────────────────────────────────
 
 @app.route("/status")
@@ -1902,10 +2142,16 @@ if __name__ == "__main__":
         help="Prolific completion code for Task 3.",
     )
     parser.add_argument(
-        "--task4-max-users",
+        "--task4-start",
         type=int,
-        default=100,
-        help="Max number of users shown in Task 4 (default: 100).",
+        default=0,
+        help="First user index (inclusive) shown in Task 4 (default: 0).",
+    )
+    parser.add_argument(
+        "--task4-end",
+        type=int,
+        default=40,
+        help="Last user index (exclusive) shown in Task 4 (0 = no limit).",
     )
     parser.add_argument(
         "--prolific-code-task4",
@@ -1923,14 +2169,27 @@ if __name__ == "__main__":
         default="C1RIAWIP",
         help="Prolific completion code for Task 5.",
     )
+    parser.add_argument(
+        "--task6-max-items",
+        type=int,
+        default=0,
+        help="Max number of items shown in Task 6 (0 = no limit).",
+    )
+    parser.add_argument(
+        "--prolific-code-task6",
+        default="",
+        help="Prolific completion code for Task 6.",
+    )
     args = parser.parse_args()
 
     # Apply workload limits (override module-level defaults)
     TASK1_MAX_USERS = args.task1_max_users
     TASK2_MAX_ITEMS = args.task2_max_items
     TASK3_MAX_PROMPTS = args.task3_max_prompts
-    TASK4_MAX_USERS = args.task4_max_users
+    TASK4_START = args.task4_start
+    TASK4_END = args.task4_end
     TASK5_MAX_PROMPTS = args.task5_max_prompts
+    TASK6_MAX_ITEMS = args.task6_max_items
 
     app.config["ANNOTATOR_MODE"] = (args.mode == "annotator")
     app.config["SHOW_OPTION_DETAIL"] = args.show_option_detail
@@ -1939,4 +2198,5 @@ if __name__ == "__main__":
     app.config["PROLIFIC_CODE_TASK3"] = args.prolific_code_task3
     app.config["PROLIFIC_CODE_TASK4"] = args.prolific_code_task4
     app.config["PROLIFIC_CODE_TASK5"] = args.prolific_code_task5
+    app.config["PROLIFIC_CODE_TASK6"] = args.prolific_code_task6
     app.run(host=args.host, port=args.port, debug=args.debug)

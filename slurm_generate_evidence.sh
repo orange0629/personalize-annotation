@@ -37,7 +37,6 @@ python "generate_attr_evidence.py" \
     --tensor-parallel-size "$TP" \
     --max-users    "$MAX_USERS" \
     --max-model-len 40960 \
-    --items-file   "$ITEMS_FILE" \
-    --force
+    --items-file   "$ITEMS_FILE"
 
 echo "=== Job finished: $(date) ==="

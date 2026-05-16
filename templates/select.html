@@ -133,6 +133,11 @@
             <span class="badge badge-yellow">⚠ Data not found</span>
           {% endif %}
           <span class="badge badge-gray">{{ t4_count }} users</span>
+          {% if t4_start > 0 or t4_end > 0 %}
+            <span class="badge" style="background:#ede9fe; color:#5b21b6;">
+              #{{ t4_start }}–{{ t4_end if t4_end > 0 else '…' }}
+            </span>
+          {% endif %}
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
@@ -175,6 +180,42 @@
         {% if t5_ready %}
           <a href="{{ url_for('task5_redirect') }}" class="btn btn-primary" style="justify-content:center;">
             Start Task 5 →
+          </a>
+        {% else %}
+          <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
+            Data required
+          </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Task 6 — Personalization Quality Annotation -->
+  <div class="card" style="border-color:#a5b4fc; margin-top:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
+      <div style="flex:1; min-width:240px;">
+        <h3 style="font-size:16px; font-weight:700; color:#1e3a5f; margin-bottom:8px;">
+          Task 6 — Personalization Quality Annotation
+        </h3>
+        <p style="font-size:13px; color:#555; line-height:1.6; margin-bottom:12px;">
+          Compare two AI responses to the same prompt — one generic, one personalized with the
+          user's profile. For each relevant user attribute, decide whether the personalized
+          response (Response B) is better than the generic one (Response A) at reflecting
+          that attribute.
+        </p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+          {% if t6_ready %}
+            <span class="badge badge-green">✓ Data ready</span>
+          {% else %}
+            <span class="badge badge-yellow">⚠ Data not found</span>
+          {% endif %}
+          <span class="badge badge-gray">{{ t6_count }} pairs</span>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:140px;">
+        {% if t6_ready %}
+          <a href="{{ url_for('task6_redirect') }}" class="btn btn-primary" style="justify-content:center;">
+            Start Task 6 →
           </a>
         {% else %}
           <span class="btn btn-secondary" style="justify-content:center; opacity:.5; cursor:not-allowed;">
