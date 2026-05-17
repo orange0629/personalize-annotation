@@ -2144,13 +2144,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task4-start",
         type=int,
-        default=0,
+        default=40,
         help="First user index (inclusive) shown in Task 4 (default: 0).",
     )
     parser.add_argument(
         "--task4-end",
         type=int,
-        default=40,
+        default=0,
         help="Last user index (exclusive) shown in Task 4 (0 = no limit).",
     )
     parser.add_argument(
