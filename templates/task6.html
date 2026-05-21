@@ -3,133 +3,165 @@
 
 {% block extra_head %}
 <style>
-/* ── Attribute row ─────────────────────────────────────────────────── */
-.cl-item {
-  border: 1px solid #e5e7eb;
-  border-radius: 7px;
-  padding: 10px 13px;
-  margin-bottom: 7px;
-  background: #fafafa;
-  transition: border-color .15s, background .15s;
-}
-.cl-item.r-yes  { background: #dcfce7; border-color: #4ade80; }
-.cl-item.r-no   { background: #fef2f2; border-color: #fca5a5; }
-.cl-item.r-none { background: #fafafa; border-color: #e5e7eb; }
+/* ── Page override: allow full viewport height use ───────────────────── */
+body { overflow: hidden; }
 
-.cl-attr-text {
-  font-weight: 600; font-size: 13px; margin-bottom: 5px;
-  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 5px; line-height: 1.4;
+/* ── Sticky nav ─────────────────────────────────────────────────────── */
+.sticky-nav {
+  position: fixed; left: 0; right: 0; z-index: 99;
+  background: #f0f2f5; padding: 0 0 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  /* top set by JS to sit below the global topbar */
 }
-.cl-attr-label { flex: 1; min-width: 0; }
-.cl-relev { font-size: 11px; color: #6b7280; font-weight: 400; flex-shrink: 0; }
+.sticky-nav > .card { border-radius: 0; margin-bottom: 0; }
 
-/* ── YES / NO buttons ──────────────────────────────────────────────── */
-.yn-group { display: flex; gap: 6px; margin-top: 6px; }
-.yn-btn {
-  padding: 4px 18px; border-radius: 5px; border: 1.5px solid #d1d5db;
-  background: #fff; cursor: pointer; font-size: 12px; font-weight: 600;
-  color: #374151; transition: all .12s; white-space: nowrap; min-height: 32px;
+/* ── Main two-column layout ─────────────────────────────────────────── */
+.workspace {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+  padding: 14px 48px 48px;
+  /* top padding set by JS after nav height is known */
 }
-.yn-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
-.yn-btn.active-yes { background: #16a34a; border-color: #15803d; color: #fff; }
-.yn-btn.active-no  { background: #ef4444; border-color: #dc2626; color: #fff; }
+@media (max-width: 960px) { .workspace { grid-template-columns: 1fr; } }
 
-/* ── Response boxes ─────────────────────────────────────────────────── */
+/* ── Scrollable panes ────────────────────────────────────────────────── */
+.left-pane, .right-pane {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e2e8f0;
+  padding-right: 4px;
+}
+.left-pane::-webkit-scrollbar, .right-pane::-webkit-scrollbar { width: 6px; }
+.left-pane::-webkit-scrollbar-track, .right-pane::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 3px; }
+.left-pane::-webkit-scrollbar-thumb, .right-pane::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+
+/* ── Prompt card ─────────────────────────────────────────────────────── */
+.prompt-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 14px 18px; margin-bottom: 12px;
+}
+.prompt-card .prompt-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: #6b7280; margin-bottom: 8px;
+}
+.prompt-card .prompt-text {
+  font-size: 14.5px; line-height: 1.7; color: #1e293b; font-weight: 500;
+}
+
+/* ── Response split ──────────────────────────────────────────────────── */
+.response-split {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
 .response-card {
-  border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 14px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden;
 }
 .response-header {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
-  padding: 7px 14px; display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #e5e7eb;
 }
-.response-header-a { background: #f1f5f9; color: #475569; border-bottom: 1px solid #e5e7eb; }
-.response-header-b { background: #eff6ff; color: #1e40af; border-bottom: 1px solid #bfdbfe; }
+.response-header-a { background: #f1f5f9; color: #475569; }
+.response-header-b { background: #eff6ff; color: #1e40af; border-bottom-color: #bfdbfe; }
 .response-body {
-  padding: 12px 14px; font-size: 13px; line-height: 1.7; color: #1e293b;
+  padding: 16px 18px; font-size: 14px; line-height: 1.85; color: #1e293b;
   white-space: pre-wrap; word-break: break-word;
-  max-height: 420px; overflow-y: auto;
-  scrollbar-width: thin; scrollbar-color: #94a3b8 #e2e8f0;
 }
-.response-body::-webkit-scrollbar { width: 6px; }
-.response-body::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 3px; }
-.response-body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
 
-/* ── Admin chips ─────────────────────────────────────────────────── */
+/* ── Right pane: attributes ─────────────────────────────────────────── */
+.question-banner {
+  background: #1e3a5f; color: #fff; border-radius: 8px;
+  padding: 11px 14px; margin-bottom: 12px;
+  font-size: 13.5px; font-weight: 600; line-height: 1.55;
+}
+.question-banner em { color: #93c5fd; font-style: normal; }
+
+.attr-row {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 7px;
+  transition: border-color .12s, background .12s;
+}
+.attr-row.irrelevant { opacity: .35; }
+.attr-row.rated-1 { background: #fef2f2; border-color: #fca5a5; }
+.attr-row.rated-2 { background: #fff7ed; border-color: #fdba74; }
+.attr-row.rated-3 { background: #fefce8; border-color: #fde047; }
+.attr-row.rated-4 { background: #f0fdf4; border-color: #86efac; }
+.attr-row.rated-5 { background: #dcfce7; border-color: #4ade80; }
+
+.attr-divider {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: #9ca3af; margin: 12px 0 7px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb;
+}
+.attr-text {
+  font-size: 13px; font-weight: 500; color: #1e293b; line-height: 1.5; margin-bottom: 8px;
+}
+
+/* ── 1-5 rating buttons ─────────────────────────────────────────────── */
+.rating-group { display: flex; gap: 4px; }
+.rating-btn {
+  flex: 1; padding: 6px 0; border-radius: 5px; border: 1.5px solid #d1d5db;
+  background: #fff; cursor: pointer; font-size: 13px; font-weight: 700;
+  color: #374151; transition: all .1s; text-align: center;
+}
+.rating-btn:hover { border-color: #6366f1; color: #4f46e5; background: #eef2ff; }
+.rating-btn.active-1 { background: #ef4444; border-color: #dc2626; color: #fff; }
+.rating-btn.active-2 { background: #f97316; border-color: #ea580c; color: #fff; }
+.rating-btn.active-3 { background: #eab308; border-color: #ca8a04; color: #fff; }
+.rating-btn.active-4 { background: #22c55e; border-color: #16a34a; color: #fff; }
+.rating-btn.active-5 { background: #16a34a; border-color: #15803d; color: #fff; }
+.rating-legend {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: #9ca3af; margin-top: 3px; padding: 0 2px;
+  text-align: center;
+}
+.rating-legend span:first-child { text-align: left; }
+.rating-legend span:last-child  { text-align: right; }
+
+/* ── Admin overlay ──────────────────────────────────────────────────── */
 .admin-chip {
-  display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px;
-  border-radius: 10px; font-size: 11px; border: 1px solid transparent; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px;
+  border-radius: 8px; font-size: 10px; border: 1px solid #e5e7eb;
+  background: #f3f4f6; white-space: nowrap;
 }
 .admin-chip-name { font-weight: 600; }
-.admin-chip-val  { font-weight: 400; font-style: italic; }
-.admin-chip.r-yes  { background: #dcfce7; border-color: #4ade80; color: #166534; }
-.admin-chip.r-no   { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
-.admin-chip.r-none { background: #f3f4f6; border-color: #e5e7eb; color: #9ca3af; }
 .admin-overlay {
-  margin-top: 7px; padding: 6px 8px;
-  background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 11px;
+  margin-top: 6px; padding: 4px 7px; background: #f8fafc; border: 1px solid #e5e7eb;
+  border-radius: 5px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
 }
-.admin-overlay-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .admin-overlay-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .4px; color: #9ca3af; margin-right: 2px;
 }
 
-/* ── Layout ─────────────────────────────────────────────────────── */
-.section-header {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
-  color: #888; margin: 14px 0 7px; padding-bottom: 4px;
-  border-bottom: 1px solid #e5e7eb;
-}
-.sticky-nav { position: sticky; top: 44px; z-index: 50; background: #f8fafc; padding-bottom: 4px; }
-.two-col-sticky { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-@media (max-width: 900px) { .two-col-sticky { grid-template-columns: 1fr; } }
-.left-col-wrap { min-height: 100%; }
-.sticky-col {
-  position: sticky; top: 144px; max-height: calc(100vh - 160px);
-  overflow-y: scroll; padding-bottom: 32px;
-  scrollbar-width: thin; scrollbar-color: #94a3b8 #e2e8f0;
-  border-radius: 8px; overscroll-behavior: contain;
-}
-.sticky-col::-webkit-scrollbar { width: 7px; }
-.sticky-col::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
-.sticky-col::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
-@media (max-width: 768px) {
-  .sticky-nav { top: 38px; }
-  .sticky-col { position: relative !important; top: auto !important; max-height: none !important; overflow-y: visible !important; padding-bottom: 0 !important; }
-  .yn-btn { min-height: 34px; padding: 4px 14px; }
-}
-
-.instr-banner {
-  font-size: 13px; font-weight: 500; color: #1e3a5f; margin-top: 8px; padding: 10px 14px;
-  border: 2px solid #3b82f6; border-radius: 7px; background: #dbeafe; line-height: 1.6;
-}
-.flag-btn { padding: 4px 10px; border-radius: 5px; border: 1.5px solid #fca5a5; background: #fff; cursor: pointer; font-size: 11px; color: #b91c1c; font-weight: 500; transition: all .15s; white-space: nowrap; }
+/* ── Misc ────────────────────────────────────────────────────────────── */
+.flag-btn { padding: 4px 10px; border-radius: 5px; border: 1.5px solid #fca5a5; background: #fff; cursor: pointer; font-size: 11px; color: #b91c1c; font-weight: 500; transition: all .15s; }
 .flag-btn:hover, .flag-btn.active { background: #fee2e2; border-color: #dc2626; }
 .warn-badge { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
 .btn-nav { background: #2563eb; color: #fff; }
 .btn-nav:hover { background: #1d4ed8; }
+.instr-banner {
+  font-size: 12.5px; color: #1e3a5f; margin-top: 7px; padding: 8px 12px;
+  border: 2px solid #3b82f6; border-radius: 7px; background: #dbeafe; line-height: 1.5;
+}
 </style>
 {% endblock %}
 
 {% block body %}
-<div class="container">
+<div style="margin:0; padding:0;">
 
-  <!-- Sticky navigation bar -->
-  <div class="sticky-nav">
-    <div class="card" style="padding:10px 16px; margin-bottom:0;">
+  <!-- Fixed nav bar -->
+  <div class="sticky-nav" id="navBar">
+    <div class="card" style="padding:8px 20px; margin:0; border-radius:0; border-left:none; border-right:none; border-top:none;">
       <div class="nav-bar">
         {% if idx > 0 %}
-          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task6_view', idx=idx-1) }}')">← Save &amp; Prev</button>
+          <button class="btn btn-secondary btn-sm" onclick="saveAndNavigate('{{ url_for('task6_view', idx=idx-1) }}')">← Prev</button>
         {% else %}
-          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Save &amp; Prev</span>
+          <span class="btn btn-secondary btn-sm" style="opacity:.4;">← Prev</span>
         {% endif %}
 
-        <span class="nav-info">Item <strong>{{ idx + 1 }}</strong> of <strong>{{ total }}</strong></span>
+        <span class="nav-info">Item <strong>{{ idx + 1 }}</strong> / <strong>{{ total }}</strong></span>
         <span class="progress-pill">{{ "%.1f"|format(100*(idx+1)/total) }}%</span>
-
-        {% if is_annotated %}<span class="annotated-badge">✓ Annotated</span>{% endif %}
-
-        <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump to #</button>
+        {% if is_annotated %}<span class="annotated-badge">✓ Done</span>{% endif %}
+        <button class="btn btn-secondary btn-sm" onclick="openJumpModal()">Jump</button>
 
         {% if idx < total - 1 %}
           <button class="btn btn-nav btn-sm" onclick="saveAndNavigate('{{ url_for('task6_view', idx=idx+1) }}')">Save &amp; Next →</button>
@@ -139,128 +171,124 @@
 
         <span style="flex:1;"></span>
         <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
-        <button class="flag-btn {% if existing_flagged %}active{% endif %}" id="flagBtn" onclick="toggleFlag()">🚩 Flag</button>
+        <button class="flag-btn {% if existing_flagged %}active{% endif %}" id="flagBtn" onclick="toggleFlag()">🚩</button>
         <span id="saveStatus" class="save-status" style="opacity:0;"> </span>
       </div>
 
-      <!-- Instruction -->
       <div class="instr-banner">
-        📋 <strong>Task 6:</strong> Compare two AI responses to the same prompt. For each user attribute, decide whether <strong>Response B</strong> (personalized) is better than <strong>Response A</strong> (generic) at reflecting that attribute.
-        <ul style="margin: 6px 0 0 0; padding-left: 18px; font-size: 13px;">
-          <li><strong>YES</strong> — Response B better reflects this attribute than Response A (even subtly: tone, vocabulary, examples, emphasis).</li>
-          <li><strong>NO</strong> — Response B is not better than Response A for this attribute.</li>
-        </ul>
-        <details>
-          <summary style="font-size:11px; color:#2563eb; cursor:pointer; margin-top:6px; display:inline-block; text-decoration:underline; background:none; border:none; padding:0;">View full instructions ▸</summary>
-          <div style="margin-top:8px; padding-top:8px; border-top:1px solid #93c5fd; font-size:12px; color:#374151; font-weight:400; line-height:1.7;">
-            <ul>
-              <li>Personalization does <em>not</em> have to be explicit. Subtle differences in tone, depth, vocabulary, or examples count.</li>
-              <li>Compare <em>only</em> through the lens of the listed attribute — not which response is generally better.</li>
-              <li>Click <strong>🚩 Flag</strong> if the content makes you uncomfortable.</li>
-            </ul>
-          </div>
-        </details>
+        📋 <strong>Task 6:</strong> Imagine you are a user with the listed attributes. Read both responses and for each relevant attribute, rate how much more you personally like Response B over Response A <em>given that attribute about yourself</em>.
+        <strong>1</strong> = B much worse &nbsp;·&nbsp; <strong>2</strong> = B somewhat worse &nbsp;·&nbsp;
+        <strong>3</strong> = No difference &nbsp;·&nbsp; <strong>4</strong> = B somewhat better &nbsp;·&nbsp;
+        <strong>5</strong> = B much better &nbsp;·&nbsp;
+        ⚠️ <em>Note: a response mentioning your attribute does not automatically mean you like it more — rate how it actually makes you feel.</em>
       </div>
     </div>
   </div>
 
   {% if task_done %}
-  <div style="position:fixed; inset:0; z-index:999; background:rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;" id="doneOverlay">
-    <div style="background:#fff; border-radius:14px; padding:40px 44px; max-width:460px; width:90vw; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.25);">
-      <div style="font-size:52px; margin-bottom:12px;">🎉</div>
-      <h2 style="font-size:22px; font-weight:800; color:#166534; margin-bottom:10px;">You're all done!</h2>
-      <p style="font-size:14px; color:#555; line-height:1.6; margin-bottom:24px;">
-        All items are annotated. <strong>Go to the completion page to get your Prolific code and submit your work.</strong>
-      </p>
-      <a href="/task6/complete" style="display:block; background:#16a34a; color:#fff; font-weight:700; font-size:16px; padding:13px 0; border-radius:8px; text-decoration:none; margin-bottom:12px;">
-        Go to Completion Page →
-      </a>
-      <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none; border:none; font-size:12px; color:#aaa; cursor:pointer; text-decoration:underline;">
-        Dismiss and keep reviewing
-      </button>
+  <div style="position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;" id="doneOverlay">
+    <div style="background:#fff;border-radius:14px;padding:36px 40px;max-width:440px;width:90vw;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.25);">
+      <div style="font-size:48px;margin-bottom:10px;">🎉</div>
+      <h2 style="font-size:20px;font-weight:800;color:#166534;margin-bottom:8px;">All done!</h2>
+      <p style="font-size:14px;color:#555;line-height:1.6;margin-bottom:20px;">Go to the completion page to get your Prolific code.</p>
+      <a href="/task6/complete" style="display:block;background:#16a34a;color:#fff;font-weight:700;font-size:15px;padding:12px 0;border-radius:8px;text-decoration:none;margin-bottom:10px;">Go to Completion Page →</a>
+      <button onclick="document.getElementById('doneOverlay').style.display='none'" style="background:none;border:none;font-size:12px;color:#aaa;cursor:pointer;text-decoration:underline;">Dismiss</button>
     </div>
   </div>
   {% endif %}
 
-  <!-- Meta -->
-  <div class="card" style="padding:10px 16px; margin-top:8px;">
-    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-      <span class="badge badge-gray">Prompt #{{ item.prompt_index }}</span>
-      <span class="badge badge-blue">{{ checklist_items|length }} attributes</span>
-      <span class="badge badge-gray" style="font-size:10px;">{{ item.eval_model.split('/')[-1] }}</span>
-      {% if is_admin %}
-        <span class="badge" style="background:#fce7f3; color:#9d174d;">Admin view</span>
-      {% endif %}
-    </div>
-  </div>
+  <!-- Main workspace -->
+  <div class="workspace" id="workspace">
 
-  <div class="two-col-sticky" style="margin-top:12px;">
+    <!-- LEFT PANE: Prompt + side-by-side responses -->
+    <div class="left-pane" id="leftPane">
 
-    <!-- Left: attributes to judge (sticky) -->
-    <div class="left-col-wrap">
-    <div class="sticky-col">
-
-      <div class="card">
-        <div class="card-title">Prompt</div>
-        <div class="prompt-box">{{ item.prompt_text }}</div>
+      <div class="prompt-card">
+        <div class="prompt-label">Prompt</div>
+        <div class="prompt-text">{{ item.prompt_text }}</div>
       </div>
 
-      <!-- Attribute rating panel -->
-      <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-        <div style="font-size: 13px; font-weight: 700; color: #1e293b; padding: 10px 14px 8px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 8px;">
-          User Attributes
-          <span class="badge badge-blue" style="font-size:11px;">{{ checklist_items|length }}</span>
-          <span style="font-size:11px; color:#888; font-weight:400; margin-left:4px;">— is Response B better?</span>
-        </div>
-        <div style="padding: 10px 10px 4px;">
-          <div id="attrItems">
-            {% for it in checklist_items %}
-            <div class="cl-item r-none" id="cl-{{ loop.index0 }}">
-              <div class="cl-attr-text">
-                <span class="cl-attr-label">{{ it.attribute }}</span>
-                {% if it.relevance is defined and it.relevance is not none %}<span class="cl-relev">relevance {{ "%.2f"|format(it.relevance) }}</span>{% endif %}
-              </div>
-
-              <!-- YES / NO buttons -->
-              <div class="yn-group" id="yng-{{ loop.index0 }}">
-                <button class="yn-btn" data-val="true"
-                  onclick="setBetter({{ loop.index0 }}, true, this)">YES — B is better</button>
-                <button class="yn-btn" data-val="false"
-                  onclick="setBetter({{ loop.index0 }}, false, this)">NO</button>
-              </div>
-
-              <!-- Admin overlay: other annotators' votes -->
-              {% if is_admin and admin_annots and admin_annots[loop.index0] %}
-              {% set ann_list = admin_annots[loop.index0] %}
-              <div class="admin-overlay">
-                <div class="admin-overlay-row">
-                  <span class="admin-overlay-label">Annotators</span>
-                  {% for a in ann_list %}
-                    {% set bv = a.better %}
-                    <span class="admin-chip {{ 'r-yes' if bv == true else ('r-no' if bv == false else 'r-none') }}">
-                      <span class="admin-chip-name">{{ a.annotator }}</span>
-                      <span class="admin-chip-val">{{ 'YES' if bv == true else ('NO' if bv == false else '—') }}</span>
-                    </span>
-                  {% endfor %}
-                </div>
-              </div>
-              {% endif %}
-
-            </div>
-            {% endfor %}
+      <div class="response-split">
+        <div class="response-card">
+          <div class="response-header response-header-a">
+            <span>Response A</span>
+            <span style="font-weight:400;font-size:10px;color:#94a3b8;">No user profile</span>
           </div>
+          <div class="response-body">{{ item.response_no_context }}</div>
+        </div>
+
+        <div class="response-card">
+          <div class="response-header response-header-b">
+            <span>Response B</span>
+            <span style="font-weight:400;font-size:10px;color:#93c5fd;">Personalized</span>
+          </div>
+          <div class="response-body">{{ item.response_personalized }}</div>
         </div>
       </div>
 
-      <div style="margin-top:4px; padding-top:12px; border-top:1px solid #e5e7eb;">
-        <div class="card-title" style="padding:0 0 6px 0;">Note</div>
-        <textarea class="note-area" id="annotNote"
-          placeholder="Any comments about this comparison..."
-        >{{ existing_note }}</textarea>
-        <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <button class="btn btn-success" onclick="saveAnnotation()">💾 Save Annotation</button>
+    </div>
+
+    <!-- RIGHT PANE: Attributes + ratings -->
+    <div class="right-pane" id="rightPane">
+
+      <div class="question-banner">
+        Imagine you are a user with the following attributes. For each one, do you personally like <em>Response B</em> more or less than Response A on this attribute?
+        <span style="display:block;margin-top:6px;font-size:12px;color:#bfdbfe;font-weight:400;">
+          ⚠️ Just because a response mentions your attribute doesn't mean you have to like it more — rate your genuine feeling.
+        </span>
+      </div>
+
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;">
+        <span class="badge badge-gray" style="font-size:10px;">{{ item.model_tag }}</span>
+        {% if is_admin %}<span class="badge" style="background:#fce7f3;color:#9d174d;font-size:10px;">Admin</span>{% endif %}
+      </div>
+
+      {% set relevant_attrs   = attributes | selectattr('is_relevant') | list %}
+      {% set irrelevant_attrs = attributes | rejectattr('is_relevant') | list %}
+
+      {% for attr_entry in relevant_attrs %}
+      {% set ai = loop.index0 %}
+      <div class="attr-row" id="attr-{{ ai }}">
+        <div class="attr-text">{{ attr_entry.attribute }}</div>
+        <div class="rating-group" id="rg-{{ ai }}">
+          {% for score in [1,2,3,4,5] %}
+          <button class="rating-btn" data-score="{{ score }}"
+            onclick="setRating({{ ai }}, {{ score }}, this)">{{ score }}</button>
+          {% endfor %}
+        </div>
+        <div class="rating-legend"><span>B much worse</span><span>No diff</span><span>B much better</span></div>
+
+        {% if is_admin and admin_annots and admin_annots.get(attr_entry.attribute) %}
+        <div class="admin-overlay">
+          <span class="admin-overlay-label">Others</span>
+          {% for a in admin_annots[attr_entry.attribute] %}
+            <span class="admin-chip">
+              <span class="admin-chip-name">{{ a.annotator }}</span>
+              <span>{{ a.rating }}/5</span>
+            </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      {% if irrelevant_attrs %}
+      <div class="attr-divider">Other attributes</div>
+      {% for attr_entry in irrelevant_attrs %}
+      <div class="attr-row irrelevant">
+        <div class="attr-text">{{ attr_entry.attribute }}</div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <!-- Note + Save -->
+      <div style="margin-top:14px; border-top:1px solid #e5e7eb; padding-top:10px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;margin-bottom:5px;">Note</div>
+        <textarea class="note-area" id="annotNote" placeholder="Any comments...">{{ existing_note }}</textarea>
+        <div style="margin-top:7px; display:flex; gap:7px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-success btn-sm" onclick="saveAnnotation()">💾 Save</button>
           {% if idx < total - 1 %}
-          <button class="btn btn-primary" onclick="saveAndNavigate('/task6/{{ idx+1 }}')">💾 Save &amp; Next →</button>
+          <button class="btn btn-primary btn-sm" onclick="saveAndNavigate('/task6/{{ idx+1 }}')">Save &amp; Next →</button>
           {% endif %}
           <span id="saveStatus2" class="save-status" style="opacity:0;"> </span>
           <span id="incompleteWarn" class="warn-badge" style="display:none;"></span>
@@ -268,31 +296,6 @@
       </div>
 
     </div>
-    </div><!-- end .left-col-wrap -->
-
-    <!-- Right: Two responses -->
-    <div>
-
-      <!-- Response A: no context baseline -->
-      <div class="response-card">
-        <div class="response-header response-header-a">
-          <span>Response A</span>
-          <span style="font-weight:400; font-size:10px; color:#94a3b8;">No user profile (generic)</span>
-        </div>
-        <div class="response-body">{{ item.response_no_context }}</div>
-      </div>
-
-      <!-- Response B: personalized -->
-      <div class="response-card">
-        <div class="response-header response-header-b">
-          <span>Response B</span>
-          <span style="font-weight:400; font-size:10px; color:#93c5fd;">Personalized with user profile</span>
-        </div>
-        <div class="response-body">{{ item.response_personalized }}</div>
-      </div>
-
-    </div>
-
   </div>
 
 </div>
@@ -300,48 +303,54 @@
 <!-- Jump Modal -->
 <div class="modal-overlay" id="jumpModal" onclick="closeJumpModal(event)">
   <div class="modal-box" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      Jump to Item
+    <div class="modal-header">Jump to Item
       <button onclick="closeJumpModal()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:18px;">✕</button>
     </div>
     <div class="modal-search">
-      <input type="text" id="jumpSearch" placeholder="Search by index or prompt..." oninput="filterJumpList()">
+      <input type="text" id="jumpSearch" placeholder="Search prompt or model..." oninput="filterJumpList()">
     </div>
     <div class="modal-list" id="jumpList">
-      <div style="padding:20px; text-align:center; color:#888; font-size:13px;">Loading...</div>
+      <div style="padding:20px;text-align:center;color:#888;font-size:13px;">Loading...</div>
     </div>
   </div>
 </div>
-<div style="height: 120px;"></div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function adjustStickyCol() {
-  const nav = document.querySelector('.sticky-nav');
-  const col = document.querySelector('.sticky-col');
-  if (!nav || !col) return;
-  const offset = 44 + nav.offsetHeight + 4;
-  col.style.top = offset + 'px';
-  col.style.maxHeight = `calc(100vh - ${offset + 16}px)`;
+// Fit workspace below global topbar + fixed sticky-nav
+function layout() {
+  const topbar = document.querySelector('.topbar');
+  const nav    = document.getElementById('navBar');
+  const ws     = document.getElementById('workspace');
+  if (!nav || !ws) return;
+  const topbarH = topbar ? topbar.offsetHeight : 0;
+  nav.style.top = topbarH + 'px';
+  const navH    = nav.offsetHeight;
+  const totalH  = topbarH + navH;
+  ws.style.paddingTop = (totalH + 20) + 'px';
+  const paneH = `calc(100vh - ${totalH + 96}px)`;
+  document.getElementById('leftPane').style.height  = paneH;
+  document.getElementById('rightPane').style.height = paneH;
 }
-document.addEventListener('DOMContentLoaded', adjustStickyCol);
-window.addEventListener('resize', adjustStickyCol);
+document.addEventListener('DOMContentLoaded', layout);
+window.addEventListener('resize', layout);
 
-const checklistItems = {{ checklist_items | tojson }};
-// currentBetter[i] = true | false | null
-const currentBetter = checklistItems.map(() => null);
+// Only relevant attributes get ratings
+const relevantAttrs = {{ (attributes | selectattr('is_relevant') | list) | tojson }};
+const currentRatings = {};
+relevantAttrs.forEach(a => { currentRatings[a.attribute] = null; });
 let isFlagged = {{ 'true' if existing_flagged else 'false' }};
 
-// ── Restore existing annotation ────────────────────────────────────────
-{% if existing_judgments %}
-const existingJudgments = {{ existing_judgments | tojson }};
+// Restore existing ratings
+{% if existing_ratings %}
+const existingRatings = {{ existing_ratings | tojson }};
 document.addEventListener('DOMContentLoaded', () => {
-  checklistItems.forEach((it, i) => {
-    const val = existingJudgments[it.attribute];
-    if (val !== null && val !== undefined) {
-      currentBetter[i] = val;
-      applyUI(i, val);
+  relevantAttrs.forEach((a, i) => {
+    const r = existingRatings[a.attribute];
+    if (r !== null && r !== undefined) {
+      currentRatings[a.attribute] = r;
+      applyRatingUI(i, r);
     }
   });
   updateIncompleteWarn();
@@ -350,110 +359,95 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', updateIncompleteWarn);
 {% endif %}
 
-function setBetter(idx, val, btn) {
-  if (currentBetter[idx] === val) {
-    currentBetter[idx] = null;
-    applyUI(idx, null);
+function setRating(attrIdx, score) {
+  const attr = relevantAttrs[attrIdx].attribute;
+  if (currentRatings[attr] === score) {
+    currentRatings[attr] = null;
+    applyRatingUI(attrIdx, null);
   } else {
-    currentBetter[idx] = val;
-    applyUI(idx, val);
+    currentRatings[attr] = score;
+    applyRatingUI(attrIdx, score);
   }
   updateIncompleteWarn();
 }
 
-function applyUI(idx, val) {
-  const card = document.getElementById(`cl-${idx}`);
-  card.className = card.className.replace(/\br-\S+/g, '').trim();
-  if (val === true)       card.classList.add('r-yes');
-  else if (val === false) card.classList.add('r-no');
-  else                    card.classList.add('r-none');
-
-  document.getElementById(`yng-${idx}`).querySelectorAll('.yn-btn').forEach(b => {
-    b.className = b.className.replace(/\bactive-\S+/g, '').trim();
-    const bVal = b.dataset.val === 'true';
-    if (val !== null && bVal === val) b.classList.add(bVal ? 'active-yes' : 'active-no');
+function applyRatingUI(attrIdx, score) {
+  const row = document.getElementById(`attr-${attrIdx}`);
+  if (!row) return;
+  row.className = row.className.replace(/\brated-\d\b/g, '').trim();
+  if (score !== null) row.classList.add(`rated-${score}`);
+  const rg = document.getElementById(`rg-${attrIdx}`);
+  if (!rg) return;
+  rg.querySelectorAll('.rating-btn').forEach(b => {
+    b.className = b.className.replace(/\bactive-\d\b/g, '').trim();
+    if (parseInt(b.dataset.score) === score) b.classList.add(`active-${score}`);
   });
 }
 
-function countIncomplete() {
-  return currentBetter.filter(v => v === null).length;
+function countUnrated() {
+  return relevantAttrs.filter(a => currentRatings[a.attribute] === null).length;
 }
 function updateIncompleteWarn() {
-  const n = countIncomplete();
+  const n = countUnrated();
   const el = document.getElementById('incompleteWarn');
-  if (n > 0) { el.textContent = `${n} attribute${n > 1 ? 's' : ''} not rated`; el.style.display = 'inline'; }
-  else { el.style.display = 'none'; }
+  if (n > 0) { el.textContent = `${n} attribute${n>1?'s':''} not rated`; el.style.display='inline'; }
+  else { el.style.display='none'; }
 }
 
 function toggleFlag() {
-  const wasOff = !isFlagged;
   isFlagged = !isFlagged;
   document.getElementById('flagBtn').classList.toggle('active', isFlagged);
-  if (isFlagged && wasOff) {
-    fetch(`/task6/{{ idx }}/save`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(collectPayload()),
-    }).then(r => r.json()).then(d => {
-      if (d.all_done) { location.href = '/task6/complete'; return; }
-      {% if idx < total - 1 %}location.href = '/task6/{{ idx + 1 }}';{% endif %}
-    }).catch(() => {});
-  }
 }
 
 function collectPayload() {
-  return {
-    personalization_judgments: checklistItems.map((it, i) => ({
-      attribute: it.attribute,
-      better:    currentBetter[i],
-    })),
-    note:    document.getElementById('annotNote').value,
-    flagged: isFlagged,
-  };
+  const ratings = {};
+  relevantAttrs.forEach(a => {
+    if (currentRatings[a.attribute] !== null) ratings[a.attribute] = currentRatings[a.attribute];
+  });
+  return { ratings, note: document.getElementById('annotNote').value, flagged: isFlagged };
 }
 
 function saveAnnotation() {
   const st1 = document.getElementById('saveStatus');
   const st2 = document.getElementById('saveStatus2');
-  [st1, st2].forEach(s => { s.style.opacity = '1'; showSaveStatus(s, 'saving', 'Saving…'); });
+  [st1, st2].forEach(s => { s.style.opacity='1'; showSaveStatus(s,'saving','Saving…'); });
   fetch(`/task6/{{ idx }}/save`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify(collectPayload()),
   })
   .then(r => r.json())
   .then(d => {
     if (d.ok) {
-      const n = countIncomplete();
-      const msg = n > 0 ? `✓ Saved (${n} unrated)` : '✓ Saved';
-      const type = n > 0 ? 'warning' : 'saved';
-      [st1, st2].forEach(s => showSaveStatus(s, type, msg));
-      setTimeout(() => [st1, st2].forEach(s => s.style.opacity = '0'), 3000);
+      const n = countUnrated();
+      [st1, st2].forEach(s => showSaveStatus(s, n>0?'warning':'saved', n>0?`✓ Saved (${n} unrated)`:'✓ Saved'));
+      setTimeout(() => [st1, st2].forEach(s => s.style.opacity='0'), 3000);
     } else {
-      [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Error: ' + (d.error || '?')));
+      [st1, st2].forEach(s => showSaveStatus(s,'error','✗ '+(d.error||'Error')));
     }
   })
-  .catch(() => [st1, st2].forEach(s => showSaveStatus(s, 'error', '✗ Network error')));
+  .catch(() => [st1, st2].forEach(s => showSaveStatus(s,'error','✗ Network error')));
 }
 
 async function saveAndNavigate(url) {
-  const n = countIncomplete();
-  if (n > 0) {
-    if (!confirm(`${n} attribute${n > 1 ? 's are' : ' is'} not yet rated. Proceed anyway?`)) return;
+  const n = countUnrated();
+  if (n > 0 && !isFlagged) {
+    if (!confirm(`${n} attribute${n>1?'s are':' is'} not yet rated. Proceed anyway?`)) return;
   }
   const st1 = document.getElementById('saveStatus');
-  if (st1) { st1.style.opacity = '1'; showSaveStatus(st1, 'saving', 'Saving…'); }
+  if (st1) { st1.style.opacity='1'; showSaveStatus(st1,'saving','Saving…'); }
   try {
     const resp = await fetch(`/task6/{{ idx }}/save`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(collectPayload()),
     });
     const d = await resp.json();
     if (url === '/task6/complete') {
-      if (d.all_done) { location.href = '/task6/complete'; return; }
-      if (st1) showSaveStatus(st1, 'warning', '✓ Saved — finish all items first');
-      setTimeout(() => { if (st1) st1.style.opacity = '0'; }, 3500);
+      if (d.all_done) { location.href='/task6/complete'; return; }
+      if (st1) showSaveStatus(st1,'warning','✓ Saved — finish all items first');
+      setTimeout(() => { if(st1) st1.style.opacity='0'; }, 3500);
       return;
     }
-    if (d.all_done) { location.href = '/task6/complete'; return; }
+    if (d.all_done) { location.href='/task6/complete'; return; }
   } catch(e) {}
   location.href = url;
 }
@@ -464,7 +458,7 @@ function openJumpModal() {
   document.getElementById('jumpSearch').value = '';
   if (jumpItems.length === 0) {
     fetch('/task6/list').then(r => r.json()).then(data => { jumpItems = data; renderJumpList(data); });
-  } else { renderJumpList(jumpItems); }
+  } else renderJumpList(jumpItems);
   setTimeout(() => document.getElementById('jumpSearch').focus(), 50);
 }
 function closeJumpModal(e) {
@@ -473,21 +467,22 @@ function closeJumpModal(e) {
 }
 function filterJumpList() {
   const q = document.getElementById('jumpSearch').value.toLowerCase();
-  renderJumpList(jumpItems.filter(item =>
-    String(item.annotation_index).includes(q) ||
-    String(item.prompt_index || '').includes(q) ||
-    (item.prompt_snippet || '').toLowerCase().includes(q)
+  renderJumpList(jumpItems.filter(it =>
+    String(it.annotation_index).includes(q) ||
+    (it.model_tag||'').toLowerCase().includes(q) ||
+    (it.prompt_snippet||'').toLowerCase().includes(q)
   ));
 }
 function renderJumpList(items) {
   const el = document.getElementById('jumpList');
-  if (!items.length) { el.innerHTML = '<div style="padding:16px; text-align:center; color:#888;">No results.</div>'; return; }
-  el.innerHTML = items.map(item =>
-    `<div class="modal-item ${item.annotated ? 'annotated' : ''}"
-          onclick="saveAndNavigate('/task6/${item.annotation_index}')">
-      <span class="modal-item-idx">#${item.annotation_index + 1}</span>
-      <span class="modal-item-text">${escHtml(item.prompt_snippet || '')}…</span>
-      ${item.annotated ? '<span class="modal-item-done">✓</span>' : ''}
+  if (!items.length) { el.innerHTML='<div style="padding:16px;text-align:center;color:#888;">No results.</div>'; return; }
+  el.innerHTML = items.map(it =>
+    `<div class="modal-item ${it.annotated?'annotated':''}"
+          onclick="saveAndNavigate('/task6/${it.annotation_index}')">
+      <span class="modal-item-idx">#${it.annotation_index+1}</span>
+      <span class="modal-item-text">${escHtml(it.prompt_snippet||'')}…</span>
+      <span style="font-size:10px;color:#9ca3af;margin-left:4px;">${it.model_tag||''}</span>
+      ${it.annotated?'<span class="modal-item-done">✓</span>':''}
     </div>`
   ).join('');
 }

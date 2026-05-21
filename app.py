@@ -656,11 +656,9 @@ def count_annotated(task: str, total: int, offset: int = 0) -> int:
         elif task == "6":
             item = _task6_items[i] if i < len(_task6_items) else None
             if item:
-                n_attrs = len(item.get("items", []))
-                judgments = rec.get("personalization_judgments", [])
-                if n_attrs > 0 and len(judgments) == n_attrs and all(
-                    j.get("better") is not None for j in judgments
-                ):
+                relevant_attrs = [a["attribute"] for a in item.get("attributes", []) if a.get("is_relevant")]
+                ratings = rec.get("ratings", {})
+                if relevant_attrs and all(ratings.get(a) is not None for a in relevant_attrs):
                     count += 1
     return count
 
@@ -1931,54 +1929,50 @@ def task6_view(idx: int):
     item = _task6_items[idx]
 
     existing = load_existing_annotations("6").get(str(idx))
-    existing_judgments: Dict[str, Optional[bool]] = {}
+    existing_ratings: Dict[str, Optional[int]] = {}
     existing_note    = ""
     existing_flagged = False
     if existing:
         existing_flagged = existing.get("flagged", False)
         existing_note    = existing.get("note", "")
-        for j in existing.get("personalization_judgments", []):
-            existing_judgments[j["attribute"]] = j.get("better")
+        existing_ratings = existing.get("ratings", {})
 
-    checklist_items = item.get("items", [])
-    is_annotated = False
-    if existing_flagged:
-        is_annotated = True
-    elif existing and checklist_items:
-        is_annotated = (
-            len(existing.get("personalization_judgments", [])) == len(checklist_items) and
-            all(j.get("better") is not None
-                for j in existing.get("personalization_judgments", []))
-        )
+    # Sort: relevant attributes first, then irrelevant
+    attributes = sorted(
+        item.get("attributes", []),
+        key=lambda a: (0 if a.get("is_relevant") else 1),
+    )
+    relevant_attrs = [a["attribute"] for a in attributes if a.get("is_relevant")]
+    is_annotated  = existing_flagged or bool(
+        relevant_attrs and all(existing_ratings.get(a) is not None for a in relevant_attrs)
+    )
 
     task_done = count_annotated("6", total) >= total
 
-    admin_annots: Optional[List[Dict]] = None
+    # Admin overlay: per-attribute ratings keyed by attribute text
+    admin_annots: Optional[Dict] = None
     if is_admin():
         all_annots = load_all_annotators("6")
-        admin_annots = []
-        for it in checklist_items:
-            attr_text = it["attribute"]
+        admin_annots = {}
+        for attr_entry in attributes:
+            attr_text = attr_entry["attribute"]
             per_attr: List[Dict] = []
             for ann, recs in all_annots.items():
                 rec = recs.get(str(idx))
                 if rec:
-                    for j in rec.get("personalization_judgments", []):
-                        if j.get("attribute") == attr_text:
-                            per_attr.append({
-                                "annotator": ann,
-                                "better":    j.get("better"),
-                            })
-                            break
-            admin_annots.append(per_attr)
+                    rating = rec.get("ratings", {}).get(attr_text)
+                    if rating is not None:
+                        per_attr.append({"annotator": ann, "rating": rating})
+            if per_attr:
+                admin_annots[attr_text] = per_attr
 
     return render_template(
         "task6.html",
         idx=idx,
         total=total,
         item=item,
-        checklist_items=checklist_items,
-        existing_judgments=existing_judgments,
+        attributes=attributes,
+        existing_ratings=existing_ratings,
         existing_note=existing_note,
         existing_flagged=existing_flagged,
         is_annotated=is_annotated,
@@ -2002,26 +1996,18 @@ def task6_save(idx: int):
     data    = request.get_json(force=True)
     flagged = data.get("flagged", False)
     note    = data.get("note", "")
-
-    judgments_by_attr: Dict[str, Optional[bool]] = {
-        j["attribute"]: j.get("better")
-        for j in data.get("personalization_judgments", [])
-    }
-
-    personalization_judgments = [
-        {"attribute": it["attribute"], "better": judgments_by_attr.get(it["attribute"])}
-        for it in item.get("items", [])
-    ]
+    ratings = data.get("ratings", {})   # {attribute_text: 1-5 or null}
 
     save_annotation("6", {
-        "task":                     "6",
-        "index":                    idx,
-        "item_index":               item.get("item_index", idx),
-        "prompt_index":             item.get("prompt_index", -1),
-        "user_id":                  item.get("user_id", ""),
-        "personalization_judgments": personalization_judgments,
-        "note":                     note,
-        "flagged":                  flagged,
+        "task":       "6",
+        "index":      idx,
+        "item_index": item.get("item_index", idx),
+        "prompt_id":  item.get("prompt_id", ""),
+        "user_id":    item.get("user_id", ""),
+        "model_tag":  item.get("model_tag", ""),
+        "ratings":    ratings,
+        "note":       note,
+        "flagged":    flagged,
     })
 
     all_done = total > 0 and count_annotated("6", total) >= total
@@ -2041,20 +2027,15 @@ def task6_list():
         if flagged:
             annotated = True
         elif rec:
-            n_attrs = len(item.get("items", []))
-            judgments = rec.get("personalization_judgments", [])
-            annotated = (
-                n_attrs > 0 and
-                len(judgments) == n_attrs and
-                all(j.get("better") is not None for j in judgments)
-            )
+            relevant_attrs = [a["attribute"] for a in item.get("attributes", []) if a.get("is_relevant")]
+            ratings = rec.get("ratings", {})
+            annotated = bool(relevant_attrs) and all(ratings.get(a) is not None for a in relevant_attrs)
         else:
             annotated = False
         result.append({
             "annotation_index": i,
-            "prompt_index":     item.get("prompt_index", -1),
             "prompt_snippet":   item.get("prompt_text", "")[:120],
-            "n_attrs":          len(item.get("items", [])),
+            "model_tag":        item.get("model_tag", ""),
             "annotated":        annotated,
         })
     return jsonify(result)
